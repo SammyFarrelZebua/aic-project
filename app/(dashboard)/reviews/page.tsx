@@ -11,6 +11,9 @@ interface ReviewPrediction {
   complaint_type: string
   severity: string
   confidence: number
+  prob_product_defect?: number
+  prob_packaging_damage?: number
+  prob_late_delivery?: number
 }
 
 interface ReviewItem {
@@ -160,19 +163,22 @@ function ReviewsContent() {
                   <th className="px-4 py-3 font-medium">Teks Review</th>
                   <th className="px-4 py-3 font-medium">Tipe Komplain</th>
                   <th className="px-4 py-3 font-medium">Severity</th>
+                  <th className="px-4 py-3 font-medium text-right">Cacat Produk</th>
+                  <th className="px-4 py-3 font-medium text-right">Kemasan Rusak</th>
+                  <th className="px-4 py-3 font-medium text-right">Keterlambatan</th>
                   <th className="px-4 py-3 font-medium text-right">Confidence</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center">
+                    <td colSpan={9} className="px-4 py-12 text-center">
                       <Loader2 className="w-6 h-6 animate-spin text-ink-muted mx-auto" />
                     </td>
                   </tr>
                 ) : reviews.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-ink-muted">
+                    <td colSpan={9} className="px-4 py-12 text-center text-ink-muted">
                       Tidak ada ulasan yang ditemukan
                     </td>
                   </tr>
@@ -216,7 +222,16 @@ function ReviewsContent() {
                             <span className="text-ink-muted">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-figures">
+                        <td className="px-4 py-3 text-right tabular-figures text-ink-muted">
+                          {prediction && prediction.prob_product_defect !== undefined ? `${(prediction.prob_product_defect * 100).toFixed(1)}%` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-figures text-ink-muted">
+                          {prediction && prediction.prob_packaging_damage !== undefined ? `${(prediction.prob_packaging_damage * 100).toFixed(1)}%` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-figures text-ink-muted">
+                          {prediction && prediction.prob_late_delivery !== undefined ? `${(prediction.prob_late_delivery * 100).toFixed(1)}%` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-figures font-medium">
                           {prediction ? `${(prediction.confidence * 100).toFixed(1)}%` : "-"}
                         </td>
                       </tr>

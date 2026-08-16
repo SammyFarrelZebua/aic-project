@@ -123,19 +123,22 @@ async function classifyReviewZeroShot(reviewId: string, text: string, score: num
     return fallback;
   }
 
-  // Indonesian translated candidate labels
+  // Indonesian translated candidate labels (optimized for semantic clarity)
   const candidateLabels = [
-    'cacat produk kualitas barang buruk pecah rusak',
-    'kemasan paket rusak robek penyok kardus basah hancur',
-    'pengiriman kurir telat lama lambat meleset estimasi',
-    'ulasan normal'
+    'cacat produk atau kualitas barang buruk',
+    'kemasan paket rusak, penyok, atau basah',
+    'keterlambatan pengiriman atau kurir lambat',
+    'ulasan normal tanpa keluhan'
   ];
 
   try {
     const res = await retryWithBackoff(() => hf.zeroShotClassification({
       model: MODEL_NAME,
       inputs: text,
-      parameters: { candidate_labels: candidateLabels }
+      parameters: {
+        candidate_labels: candidateLabels,
+        hypothesis_template: "Ulasan ini berkaitan dengan masalah {}."
+      }
     }));
 
     const resData = res as { labels?: string[] } | { labels?: string[] }[];

@@ -6,7 +6,7 @@ import { cookies } from 'next/headers';
 import { detectAnomalies } from '@/utils/anomaly-detection';
 import { pipelineState } from '../state';
 
-type ClassifierFn = (text: string, candidateLabels: string[]) => Promise<{ labels: string[]; scores: number[] }>;
+type ClassifierFn = (text: string, candidateLabels: string[], options?: { hypothesis_template?: string }) => Promise<{ labels: string[]; scores: number[] }>;
 let cachedClassifier: ClassifierFn | null = null;
 
 export async function POST() {
@@ -69,11 +69,14 @@ async function runPipelineBackground() {
       let type: string | null = null;
       let severity: string | null = null;
       let confidence = 0.0;
+      let prob_product_defect = 0.0;
+      let prob_packaging_damage = 0.0;
+      let prob_late_delivery = 0.0;
 
       if (r.rating <= 3 && r.review_text && r.review_text.trim().length > 0) {
         if (processedInThisBatch >= BATCH_SIZE) {
           hasMore = true;
-          continue; 
+          continue;
         }
         processedInThisBatch++;
 
@@ -85,14 +88,27 @@ async function runPipelineBackground() {
 
         const text = r.review_text.toLowerCase().trim();
         const candidateLabels = [
-          'cacat produk atau barang rusak',
-          'kemasan hancur atau paket basah',
-          'pengiriman terlambat atau kurir lama',
-          'ulasan positif atau normal'
+          'cacat produk atau kualitas barang buruk',
+          'kemasan paket rusak, penyok, atau basah',
+          'keterlambatan pengiriman atau kurir lambat',
+          'ulasan normal tanpa keluhan'
         ];
 
         try {
-          const result = await cachedClassifier(text, candidateLabels);
+          const result = await cachedClassifier(text, candidateLabels, {
+            hypothesis_template: "Ulasan ini berkaitan dengan masalah {}."
+          });
+
+          // Map labels to their scores
+          const labelScoreMap = new Map<string, number>();
+          for (let i = 0; i < result.labels.length; i++) {
+            labelScoreMap.set(result.labels[i], result.scores[i]);
+          }
+
+          prob_product_defect = labelScoreMap.get(candidateLabels[0]) || 0;
+          prob_packaging_damage = labelScoreMap.get(candidateLabels[1]) || 0;
+          prob_late_delivery = labelScoreMap.get(candidateLabels[2]) || 0;
+
           const topLabel = result.labels[0];
 
           if (topLabel === candidateLabels[0]) type = 'PRODUCT_DEFECT';
@@ -100,7 +116,7 @@ async function runPipelineBackground() {
           else if (topLabel === candidateLabels[2]) type = 'LATE_DELIVERY';
 
           if (type) {
-            confidence = result.scores[0];
+            confidence = labelScoreMap.get(topLabel) || 0;
             severity = r.rating === 1 ? 'HIGH' : r.rating === 2 ? 'MEDIUM' : 'LOW';
           }
         } catch (e) {
@@ -116,7 +132,10 @@ async function runPipelineBackground() {
           review_id: r.review_id,
           complaint_type: type,
           severity,
-          confidence
+          confidence,
+          prob_product_defect,
+          prob_packaging_damage,
+          prob_late_delivery
         };
         newComplaintPredictions.push(pred);
         if (type) allComplaintPredictions.push(pred);
