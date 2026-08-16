@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local generated datasets and raw zip/csv olist downloads
+data/olist_*.csv
+data/analytics_traceability_dataset.json
+data/analytics_traceability_dataset.csv
+data/ground_truth_incidents.csv
+

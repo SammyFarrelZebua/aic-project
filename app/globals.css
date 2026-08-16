@@ -1,26 +1,162 @@
 @import "tailwindcss";
 
+/*
+  Dossier token system — this dashboard is framed as a supply-chain case
+  file, not a generic analytics product. Colors/type are deliberately tied
+  to that (paper/ink, amber "flag" vs teal "cleared") — keep that framing
+  when extending, don't generalize it into a neutral SaaS palette.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f1efea;
+  --paper-raised: #e8e5dd;
+  --ink: #1b2430;
+  --ink-muted: #5b6472;
+  --line: #d8d5cc;
+  --alert: #c77a2e;
+  --alert-soft: #c77a2e1f;
+  --cleared: #3e6b63;
+  --cleared-soft: #3e6b631f;
+  --evidence-glow: #8a6fd1;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
 }
 
 @theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-alert: var(--alert);
+  --color-alert-soft: var(--alert-soft);
+  --color-cleared: var(--cleared);
+  --color-cleared-soft: var(--cleared-soft);
+  --color-evidence-glow: var(--evidence-glow);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-border: var(--line);
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-plex-mono);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --paper: #14171c;
+    --paper-raised: #1b1f26;
+    --ink: #e8e6e0;
+    --ink-muted: #9aa1ad;
+    --line: #2b3038;
+    --alert: #e0954a;
+    --alert-soft: #e0954a26;
+    --cleared: #5c9c90;
+    --cleared-soft: #5c9c9026;
+    --evidence-glow: #a996e0;
+
+    --background: var(--paper);
+    --foreground: var(--ink);
   }
+}
+
+:root[data-theme="dark"] {
+  --paper: #14171c;
+  --paper-raised: #1b1f26;
+  --ink: #e8e6e0;
+  --ink-muted: #9aa1ad;
+  --line: #2b3038;
+  --alert: #e0954a;
+  --alert-soft: #e0954a26;
+  --cleared: #5c9c90;
+  --cleared-soft: #5c9c9026;
+  --evidence-glow: #a996e0;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+}
+
+.font-case {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+.tabular-figures {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes trace-line-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.trace-line-pulse {
+  animation: trace-line-pulse 1.4s ease-in-out infinite;
+}
+
+/*
+  Auth screens use a finalized, light-only mockup with its own tighter
+  palette (e.g. --paper-raised is a near-white form panel here, not the
+  darker card surface --paper-raised means on the dashboard). Scoped under
+  .auth-shell and never redefined in the dark-mode blocks above, so login
+  stays pixel-faithful to the mockup regardless of system theme.
+*/
+.auth-shell {
+  --auth-paper: #f1efea;
+  --auth-paper-raised: #faf9f6;
+  --auth-ink: #1b2430;
+  --auth-ink-muted: #5b6472;
+  --auth-line: #d8d5cc;
+  --auth-line-strong: #b9b6ac;
+  --auth-alert: #c77a2e;
+  --auth-alert-bg: #f3e4d2;
+  --auth-cleared: #3e6b63;
+  --auth-cleared-bg: #e1e9e6;
+  --auth-dossier-bg: #1b2430;
+  --auth-dossier-eyebrow: #8b93a1;
+  --auth-dossier-title: #edebe5;
+  --auth-dossier-line: #3a4453;
+  --auth-dossier-stat: #7c8492;
+  --auth-dossier-stat-alert: #e0a468;
+  --auth-evidence-bg: #232e3d;
+  --auth-evidence-border: #37414f;
+  --auth-evidence-quote: #c8ccd3;
+  --auth-evidence-meta: #6e7684;
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-auth-paper: var(--auth-paper);
+  --color-auth-paper-raised: var(--auth-paper-raised);
+  --color-auth-ink: var(--auth-ink);
+  --color-auth-ink-muted: var(--auth-ink-muted);
+  --color-auth-line: var(--auth-line);
+  --color-auth-line-strong: var(--auth-line-strong);
+  --color-auth-alert: var(--auth-alert);
+  --color-auth-alert-bg: var(--auth-alert-bg);
+  --color-auth-cleared: var(--auth-cleared);
+  --color-auth-cleared-bg: var(--auth-cleared-bg);
+  --color-auth-dossier-bg: var(--auth-dossier-bg);
+  --color-auth-dossier-eyebrow: var(--auth-dossier-eyebrow);
+  --color-auth-dossier-title: var(--auth-dossier-title);
+  --color-auth-dossier-line: var(--auth-dossier-line);
+  --color-auth-dossier-stat: var(--auth-dossier-stat);
+  --color-auth-dossier-stat-alert: var(--auth-dossier-stat-alert);
+  --color-auth-evidence-bg: var(--auth-evidence-bg);
+  --color-auth-evidence-border: var(--auth-evidence-border);
+  --color-auth-evidence-quote: var(--auth-evidence-quote);
+  --color-auth-evidence-meta: var(--auth-evidence-meta);
 }
