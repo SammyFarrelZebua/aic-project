@@ -14,6 +14,7 @@ import { AnomalyRecord } from './anomaly-detection';
 export function buildEntityFeatures(
   records: AnomalyRecord[],
   type: string,
+  entityType: 'factory' | 'warehouse' | 'courier',
   targetId: string,
   currentStart: Date,
   currentDate: Date,
@@ -39,9 +40,9 @@ export function buildEntityFeatures(
   );
 
   const entityRecords = windowRecords.filter(r => {
-    if (type === 'PRODUCT_DEFECT') return r.factory_id === targetId;
-    if (type === 'PACKAGING_DAMAGE') return r.warehouse_id === targetId;
-    if (type === 'LATE_DELIVERY') return r.courier_id === targetId;
+    if (entityType === 'factory') return r.factory_id === targetId;
+    if (entityType === 'warehouse') return r.warehouse_id === targetId;
+    if (entityType === 'courier') return r.courier_id === targetId;
     return false;
   });
 
@@ -92,9 +93,11 @@ export function scoreWithIsolationForest(
   }
 
   const inf = new IsolationForest(numberOfTrees, trainingData.length);
-  // Type assertion for compatibility with isolation-forest's DataObject[]
-  inf.fit(trainingData as any);
-  const rawScores = inf.predict(testData as any);
+  const trainObjects = trainingData.map(row => ({ ...row }));
+  const testObjects = testData.map(row => ({ ...row }));
+
+  inf.fit(trainObjects);
+  const rawScores = inf.predict(testObjects);
 
   // Normalize scores to [0, 1] range
   return rawScores.map(s => {

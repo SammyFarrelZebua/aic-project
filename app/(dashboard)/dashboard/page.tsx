@@ -50,13 +50,17 @@ export default function DashboardPage() {
           const json = await res.json();
           if (json.success && json.data) {
             setPipelineDuration(json.data.duration_ms);
-            
+
             if (json.data.status === 'done') {
               setPipelineStatus("done");
               await fetchDashboard();
             } else if (json.data.status === 'error') {
               setPipelineStatus("error");
               setPipelineError(friendlyPipelineError(json.data.error || "Unknown error"));
+            } else if (json.data.status === 'idle') {
+              // Pipeline finished/has no active background job — stop the running state.
+              setPipelineStatus("idle");
+              await fetchDashboard();
             }
           }
         } catch (e) {
