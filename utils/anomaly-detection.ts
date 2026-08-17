@@ -1,6 +1,12 @@
+import { buildEntityFeatures, scoreWithIsolationForest } from './isolation-forest-detector';
+
 export interface AnomalyRecord {
   purchaseTime: number;
   predicted_type: string | null;
+  predicted_confidence?: number;
+  prob_product_defect?: number;
+  prob_packaging_damage?: number;
+  prob_late_delivery?: number;
   factory_id?: string | null;
   warehouse_id?: string | null;
   courier_id?: string | null;
@@ -61,7 +67,15 @@ export function detectAnomalies(
         else if (type === 'PACKAGING_DAMAGE') targetCandidates = candidates.warehouseIds;
         else targetCandidates = candidates.courierIds;
 
-        const scored = targetCandidates.map(id => {
+        const trainingData = targetCandidates.map(id =>
+          buildEntityFeatures(records, type, id, currentWindowStart, currentDate, true)
+        );
+        const testData = targetCandidates.map(id =>
+          buildEntityFeatures(records, type, id, currentWindowStart, currentDate, false)
+        );
+        const ifScores = scoreWithIsolationForest(trainingData, testData);
+
+        const scored = targetCandidates.map((id, idx) => {
           const cEnt = cWindowReviews.filter(r =>
             type === 'PRODUCT_DEFECT' ? r.factory_id === id :
             type === 'PACKAGING_DAMAGE' ? r.warehouse_id === id : r.courier_id === id
@@ -79,7 +93,9 @@ export function detectAnomalies(
 
           const dr = cRate / (hRate + 0.001);
           const ics = cEntComplaints / (cComplaints || 1);
-          return { id, score: dr * ics, dr, ics };
+          const ifScore = ifScores[idx] || 0;
+          const score = 0.6 * ifScore + 0.4 * (dr * ics);
+          return { id, score, dr, ics };
         }).sort((a, b) => b.score - a.score);
 
         detectedAnomalies.push({

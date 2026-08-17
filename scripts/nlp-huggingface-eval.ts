@@ -46,7 +46,15 @@ interface Dataset {
   records: TraceabilityRecord[];
 }
 
-let cache: Record<string, string | null> = {};
+interface CacheEntry {
+  type: string | null;
+  prob_product_defect?: number;
+  prob_packaging_damage?: number;
+  prob_late_delivery?: number;
+  prob_normal?: number;
+}
+
+let cache: Record<string, string | null | CacheEntry> = {};
 if (fs.existsSync(CACHE_PATH)) {
   try {
     cache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
@@ -103,19 +111,81 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, delay = 10
 let consecutiveFailures = 0;
 let apiDisabled = false;
 
-async function classifyReviewZeroShot(reviewId: string, text: string, score: number): Promise<string | null> {
+function normalizeIndonesianText(text: string): string {
+  let normalized = text.toLowerCase();
+
+  normalized = normalized.replace(/\byg\b/g, 'yang');
+  normalized = normalized.replace(/\bdgn\b/g, 'dengan');
+  normalized = normalized.replace(/\b(ga|gak|tdk)\b/g, 'tidak');
+  normalized = normalized.replace(/\btp\b/g, 'tapi');
+  normalized = normalized.replace(/\bkrn\b/g, 'karena');
+  normalized = normalized.replace(/\bbrg\b/g, 'barang');
+  normalized = normalized.replace(/\bongkir\b/g, 'ongkos kirim');
+  normalized = normalized.replace(/\bpaking\b/g, 'kemasan');
+  normalized = normalized.replace(/\b(telat|lambat)\b/g, 'terlambat');
+  normalized = normalized.replace(/\bkurir\b/g, 'kurir');
+  normalized = normalized.replace(/\b(pecah|patah|hancur)\b/g, 'rusak');
+
+  normalized = normalized.replace(/([a-z])\1{2,}/g, '$1');
+
+  return normalized;
+}
+
+function getPredictionFromCache(reviewId: string, score: number): string | null {
+  const cachedEntry = cache[reviewId];
+  if (cachedEntry === undefined) return null;
+  if (cachedEntry === null) return null;
+
+  if (typeof cachedEntry === 'string') {
+    return cachedEntry;
+  }
+
+  if (typeof cachedEntry === 'object') {
+    const prob_product_defect = cachedEntry.prob_product_defect || 0;
+    const prob_packaging_damage = cachedEntry.prob_packaging_damage || 0;
+    const prob_late_delivery = cachedEntry.prob_late_delivery || 0;
+    const prob_normal = cachedEntry.prob_normal || 0;
+
+    const scoreMap = [
+      { type: 'PRODUCT_DEFECT', score: prob_product_defect },
+      { type: 'PACKAGING_DAMAGE', score: prob_packaging_damage },
+      { type: 'LATE_DELIVERY', score: prob_late_delivery }
+    ];
+    scoreMap.sort((a, b) => b.score - a.score);
+    const topComplaint = scoreMap[0];
+
+    let threshold = 0.35;
+    if (score === 1) threshold = 0.20;
+    else if (score === 2) threshold = 0.25;
+
+    // Relative Thresholding (Margin Comparison)
+    if (topComplaint.score - prob_normal < 0.18) {
+      return null;
+    }
+    if (topComplaint.score >= threshold) {
+      return topComplaint.type;
+    }
+    return null;
+  }
+
+  return null;
+}
+
+async function classifyReviewZeroShot(reviewId: string, rawText: string, score: number): Promise<string | null> {
   // If score is high (>= 4), classify as normal directly to save API quota
   if (score >= 4) {
     cache[reviewId] = null;
     return null;
   }
-  if (!text || !text.trim()) {
+  if (!rawText || !rawText.trim()) {
     cache[reviewId] = null;
     return null;
   }
   if (cache[reviewId] !== undefined) {
-    return cache[reviewId];
+    return getPredictionFromCache(reviewId, score);
   }
+
+  const text = normalizeIndonesianText(rawText);
 
   if (apiDisabled) {
     const fallback = classifyReviewRuleBased(text);
@@ -137,18 +207,59 @@ async function classifyReviewZeroShot(reviewId: string, text: string, score: num
       inputs: text,
       parameters: {
         candidate_labels: candidateLabels,
-        hypothesis_template: "Ulasan ini berkaitan dengan masalah {}."
+        hypothesis_template: "Ulasan ini berkaitan dengan masalah {}.",
+        multi_label: true
       }
     }));
 
-    const resData = res as { labels?: string[] } | { labels?: string[] }[];
-    const topLabel = Array.isArray(resData) ? resData[0]?.labels?.[0] : resData?.labels?.[0];
-    let pred: string | null = null;
-    if (topLabel === candidateLabels[0]) pred = 'PRODUCT_DEFECT';
-    else if (topLabel === candidateLabels[1]) pred = 'PACKAGING_DAMAGE';
-    else if (topLabel === candidateLabels[2]) pred = 'LATE_DELIVERY';
+    const resData = res as unknown as { labels: string[]; scores: number[] } | { labels: string[]; scores: number[] }[];
+    const labels = Array.isArray(resData) ? resData[0]?.labels : resData?.labels;
+    const scores = Array.isArray(resData) ? resData[0]?.scores : resData?.scores;
 
-    cache[reviewId] = pred;
+    if (!labels || !scores) {
+      throw new Error('Invalid HF API response structure');
+    }
+
+    // Map labels to their scores
+    const labelScoreMap = new Map<string, number>();
+    for (let i = 0; i < labels.length; i++) {
+      labelScoreMap.set(labels[i], scores[i]);
+    }
+
+    const prob_product_defect = labelScoreMap.get(candidateLabels[0]) || 0;
+    const prob_packaging_damage = labelScoreMap.get(candidateLabels[1]) || 0;
+    const prob_late_delivery = labelScoreMap.get(candidateLabels[2]) || 0;
+    const prob_normal = labelScoreMap.get(candidateLabels[3]) || 0;
+
+    const scoreMap = [
+      { type: 'PRODUCT_DEFECT', score: prob_product_defect },
+      { type: 'PACKAGING_DAMAGE', score: prob_packaging_damage },
+      { type: 'LATE_DELIVERY', score: prob_late_delivery }
+    ];
+    scoreMap.sort((a, b) => b.score - a.score);
+    const topComplaint = scoreMap[0];
+
+    let threshold = 0.35;
+    if (score === 1) threshold = 0.20;
+    else if (score === 2) threshold = 0.25;
+
+    let pred: string | null = null;
+    // Relative Thresholding (Margin Comparison)
+    if (topComplaint.score - prob_normal < 0.18) {
+      pred = null;
+    } else if (topComplaint.score >= threshold) {
+      pred = topComplaint.type;
+    }
+
+    // Store in cache with the new format (including probabilities)
+    cache[reviewId] = {
+      type: pred,
+      prob_product_defect,
+      prob_packaging_damage,
+      prob_late_delivery,
+      prob_normal
+    };
+
     consecutiveFailures = 0; // Reset counter on success
     return pred;
   } catch (error: unknown) {
@@ -220,7 +331,7 @@ async function run() {
   records.forEach(r => {
     const text = `${r.review_comment_title || ''} ${r.review_comment_message || ''}`.trim();
     // Default to null (normal) for score >= 4, check cache for score <= 3
-    const predicted = (r.review_score <= 3 && text) ? cache[r.review_id] || null : null;
+    const predicted = (r.review_score <= 3 && text) ? getPredictionFromCache(r.review_id, r.review_score) : null;
     const actual = r.ground_truth_incident;
 
     if (actual) {
@@ -256,7 +367,7 @@ function runAnomalyDetectionAndRanking(records: TraceabilityRecord[]) {
   // Pre-classify all reviews using cache predictions
   const predictions = records.map(r => {
     const text = `${r.review_comment_title || ''} ${r.review_comment_message || ''}`.trim();
-    const pred = (r.review_score <= 3 && text) ? cache[r.review_id] || null : null;
+    const pred = (r.review_score <= 3 && text) ? getPredictionFromCache(r.review_id, r.review_score) : null;
 
     let severity: string | null = null;
     if (pred) {

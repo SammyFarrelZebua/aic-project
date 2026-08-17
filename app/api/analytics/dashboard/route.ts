@@ -12,7 +12,7 @@ async function fetchDashboardData() {
   // 1. Fetch Summary KPIs
   const { count: totalReviews } = await supabase.from('review').select('*', { count: 'exact', head: true });
   const { count: lowRatings } = await supabase.from('review').select('*', { count: 'exact', head: true }).lte('rating', 2);
-  const { count: predictedComplaints } = await supabase.from('complaint_prediction').select('*', { count: 'exact', head: true });
+  const { count: predictedComplaints } = await supabase.from('complaint_prediction').select('*', { count: 'exact', head: true }).neq('complaint_type', 'NORMAL');
   const { count: totalAnomalies } = await supabase.from('root_cause_predictions').select('*', { count: 'exact', head: true });
 
   // 2. Accuracy Metric (against ground truth)

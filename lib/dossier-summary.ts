@@ -41,7 +41,7 @@ export async function getDossierSummary(): Promise<DossierSummary> {
 
   const [{ count: reviews }, { count: classified }, { count: anomalies }] = await Promise.all([
     supabase.from("review").select("*", { count: "exact", head: true }),
-    supabase.from("complaint_prediction").select("*", { count: "exact", head: true }),
+    supabase.from("complaint_prediction").select("*", { count: "exact", head: true }).neq("complaint_type", "NORMAL"),
     supabase.from("root_cause_predictions").select("*", { count: "exact", head: true }),
   ])
 
