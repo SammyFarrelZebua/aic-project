@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
+import { generateReviewText } from './review-corpus';
 
 export const OLIST_BASE_URL = 'https://raw.githubusercontent.com/VictorGuedes/Brazilian-E-Commerce-Public-Dataset-examples/master/dataset';
 export const DATA_DIR = path.join(process.cwd(), 'data');
@@ -114,153 +115,6 @@ export function hashStringToId(str: string, mod: number): number {
     hash = s.charCodeAt(i) + ((hash << 5) - hash);
   }
   return Math.abs(hash) % mod;
-}
-
-export function translateToIndonesian(text: string, score: number, orderId: string): { title: string; message: string } {
-  if (!text || !text.trim()) {
-    return { title: '', message: '' };
-  }
-
-  const cleanText = text.toLowerCase().trim();
-
-  const selectVariant = (variants: string[]): string => {
-    const hash = hashStringToId(orderId, variants.length);
-    return variants[hash];
-  };
-
-  if (score >= 4) {
-    const maps = [
-      {
-        keys: ['excelente', 'perfeito', 'otimo', 'ótimo', 'maravilhoso', 'recomendo', 'recomendo 100%'],
-        ind: [
-          'Sangat suka produk ini. Bahannya oke dan memuaskan.',
-          'Barang luar biasa bagus. Benar-benar puas belanja di sini.',
-          'Rekomendasi sekali, barang berkelas dan pas di hati.',
-          'Produk mantap, sesuai deskripsi dan berfungsi dengan baik.'
-        ]
-      },
-      {
-        keys: ['muito bom', 'bom', 'gostei', 'legal', 'tudo ok', 'tudo certo'],
-        ind: [
-          'Barang oke dan sesuai pesanan. Respon penjual bersahabat.',
-          'Pembelian yang memuaskan, barang bekerja optimal.',
-          'Semua berfungsi dengan baik dan aman digunakan.',
-          'Cukup puas dengan produk ini, tidak mengecewakan.'
-        ]
-      },
-      {
-        keys: ['rapido', 'rápido', 'antes do prazo', 'super rapido', 'entrega rapida'],
-        ind: [
-          'Tiba sebelum estimasi. Mantap.',
-          'Proses kirim kilat dan barang sampai tanpa kendala.',
-          'Sangat menghargai kecepatan pengantaran paket ini.',
-          'Barang sudah mendarat dengan aman sebelum batas waktu.'
-        ]
-      },
-      {
-        keys: ['parabens', 'parabéns', 'nota 10', 'show'],
-        ind: [
-          'Pelayanan oke dan memuaskan. Terima kasih.',
-          'Diberikan layanan terbaik. Sukses selalu untuk tokonya.',
-          'Sangat puas dengan penanganan pesanan ini.',
-          'Mantap sekali pelayanannya, jempolan.'
-        ]
-      }
-    ];
-
-    for (const m of maps) {
-      if (m.keys.some(k => cleanText.includes(k))) {
-        const titleVariants = ['Sangat Puas', 'Rekomendasi', 'Bagus Sekali', 'Puas'];
-        return { title: selectVariant(titleVariants), message: selectVariant(m.ind) };
-      }
-    }
-
-    const fallbackVariants = [
-      'Tiba dengan aman dan pas dengan detail toko.',
-      'Barang mendarat dalam keadaan baik tanpa kurang suatu apa pun.',
-      'Sesuai dengan ekspektasi awal, terbungkus dengan rapi.',
-      'Produk diterima sesuai pesanan dan siap digunakan.'
-    ];
-    return { title: 'Sangat Puas', message: selectVariant(fallbackVariants) };
-  }
-
-  if (score === 3) {
-    const maps = [
-      {
-        keys: ['entregue', 'recebi', 'chegou'],
-        ind: [
-          'Barang sudah diterima, tapi respon penjual agak kurang responsif.',
-          'Paket sudah sampai, tapi waktu tanggap admin perlu ditingkatkan.',
-          'Sudah tiba dengan aman, walaupun komunikasinya agak dingin.'
-        ]
-      },
-      {
-        keys: ['demorou', 'atrasou', 'esperava mais', 'razoavel', 'razoável'],
-        ind: [
-          'Kondisi barang biasa saja, pengantaran juga lumayan memakan waktu.',
-          'Mutu standar saja, proses kirim agak sedikit mundur dari jadwal.',
-          'Produk lumayan lah untuk harganya, tapi proses kirimnya santai sekali.'
-        ]
-      }
-    ];
-
-    for (const m of maps) {
-      if (m.keys.some(k => cleanText.includes(k))) {
-        const titleVariants = ['Biasa Saja', 'Cukup', 'Lumayan'];
-        return { title: selectVariant(titleVariants), message: selectVariant(m.ind) };
-      }
-    }
-    const fallbackVariants = [
-      'Kondisi produk standar dan pelayanan cukup baik.',
-      'Barang biasa saja, tidak ada yang terlalu spesial.',
-      'Mutu produk menengah dan pembungkusan standar saja.'
-    ];
-    return { title: 'Biasa Saja', message: selectVariant(fallbackVariants) };
-  }
-
-  if (score <= 2) {
-    const maps = [
-      {
-        keys: ['não gostei', 'nao gostei', 'pessimo', 'péssimo', 'horrivel', 'horrível', 'ruim', 'fraco'],
-        ind: [
-          'Saya kurang menyukai pembelian ini. Hasilnya kurang memuaskan.',
-          'Ekspektasi saya tidak terpenuhi, barangnya kurang pas dengan selera.',
-          'Kurang memuaskan secara keseluruhan, tidak merekomendasikan ini.'
-        ]
-      },
-      {
-        keys: ['quebrado', 'estragado', 'defeito', 'danificado', 'rasgado', 'amassado', 'diferente', 'nao veio', 'não veio'],
-        ind: [
-          'Kondisi barang tidak seperti yang saya harapkan saat tiba.',
-          'Pesanan yang datang berbeda dengan yang diinfokan sebelumnya.',
-          'Barang yang dikirim agak berbeda dengan gambar, mohon diperbaiki.'
-        ]
-      },
-      {
-        keys: ['atrasou', 'demorou', 'nao chegou', 'não chegou', 'nao recebi', 'não recebi', 'esperando'],
-        ind: [
-          'Proses pengantaran memakan waktu panjang melebihi jadwal. Kurang memuaskan.',
-          'Waktu penyelesaian pesanan memakan waktu sekali, butuh perbaikan layanan.',
-          'Menunggu sangat panjang sampai batas estimasi habis tanpa kejelasan.'
-        ]
-      }
-    ];
-
-    for (const m of maps) {
-      if (m.keys.some(k => cleanText.includes(k))) {
-        const titleVariants = ['Kurang Puas', 'Mengecewakan', 'Tidak Puas'];
-        return { title: selectVariant(titleVariants), message: selectVariant(m.ind) };
-      }
-    }
-    const fallbackVariants = [
-      'Layanan kurang memuaskan. Tidak pas dengan harapan.',
-      'Kurang puas belanja di toko ini karena responsnya kurang bersahabat.',
-      'Ekspektasi pelayanan tidak tercapai, semoga ada perbaikan.'
-    ];
-    return { title: 'Kurang Puas', message: selectVariant(fallbackVariants) };
-  }
-
-  return { title: '', message: '' };
 }
 
 export async function generateCoreDataset(subsetCount: number = 15000) {
@@ -494,8 +348,7 @@ export async function generateCoreDataset(subsetCount: number = 15000) {
 
   const formattedReviews = reviewsSubset.map(r => {
     let score = parseInt(r.review_score) || 5;
-    let commentTitle = r.review_comment_title || '';
-    let commentMessage = r.review_comment_message || '';
+    let commentMessage = '';
     let groundTruthIncident: string | null = null;
 
     const entities = orderToEntitiesMap[r.order_id];
@@ -517,29 +370,18 @@ export async function generateCoreDataset(subsetCount: number = 15000) {
 
     if (hasFactoryC && (prob < factCRate)) {
       score = 1;
-      const title = 'Kualitas sangat buruk';
-      const msg = 'Barang cacat dari pabrik. Baru dipasang langsung rusak. Bahan tipis tidak sesuai deskripsi, kecewa.';
-      commentMessage = `${title}: ${msg}`;
-      commentTitle = '';
+      commentMessage = generateReviewText(score, r.review_id, 'PRODUCT_DEFECT');
       groundTruthIncident = 'PRODUCT_DEFECT';
     } else if (isWarehouseSouth && (prob < whSouthRate)) {
       score = 2;
-      const title = 'Kemasan rusak parah';
-      const msg = 'Kemasan pelindung robek dan kardus penyok luar biasa saat diterima. Untung isinya tidak hancur tapi packing gudang buruk.';
-      commentMessage = `${title}: ${msg}`;
-      commentTitle = '';
+      commentMessage = generateReviewText(score, r.review_id, 'PACKAGING_DAMAGE');
       groundTruthIncident = 'PACKAGING_DAMAGE';
     } else if (isCourierFast && (prob < courFastRate)) {
       score = 1;
-      const title = 'Pengiriman sangat telat';
-      const msg = 'Kurir lama sekali mengantarkan paket. Tertahan lama di gudang sortir, estimasi meleset jauh seminggu lebih.';
-      commentMessage = `${title}: ${msg}`;
-      commentTitle = '';
+      commentMessage = generateReviewText(score, r.review_id, 'LATE_DELIVERY');
       groundTruthIncident = 'LATE_DELIVERY';
     } else {
-      const translated = translateToIndonesian(commentMessage || commentTitle || '', score, r.order_id);
-      commentMessage = [translated.title, translated.message].filter(Boolean).join(': ');
-      commentTitle = '';
+      commentMessage = generateReviewText(score, r.review_id);
     }
 
     reviewGroundTruths[r.review_id] = groundTruthIncident;
