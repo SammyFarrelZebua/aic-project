@@ -5,6 +5,25 @@ import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
 import { detectAnomalies } from '@/utils/anomaly-detection';
 import { pipelineState } from '../state';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+// PostgREST caps .select() at a default max_rows (commonly 1000) unless the
+// full range is requested explicitly, so large tables/views must be paged
+// through rather than fetched with a single unbounded select('*').
+async function selectAll<T>(supabase: SupabaseClient, table: string, columns = '*'): Promise<T[]> {
+  const pageSize = 1000;
+  let from = 0;
+  const all: T[] = [];
+  for (;;) {
+    const { data, error } = await supabase.from(table).select(columns).range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
 
 type ClassifierFn = (
   text: string,
@@ -66,15 +85,14 @@ async function runPipelineBackground() {
     await supabase.from('root_cause_predictions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('complaint_prediction').delete().neq('prediction_id', '00000000-0000-0000-0000-000000000000');
 
-    const { data: reviews, error: reviewError } = await supabase.from('review').select('*');
-    if (reviewError) throw reviewError;
+    const reviews = await selectAll<any>(supabase, 'review');
 
     const newComplaintPredictions = [];
 
-    const totalMlTasks = (reviews || []).filter(r => r.rating <= 3 && r.review_text && r.review_text.trim().length > 0).length;
+    const totalMlTasks = reviews.filter(r => r.rating <= 3 && r.review_text && r.review_text.trim().length > 0).length;
     let mlProcessedCount = 0;
 
-    for (const r of (reviews || [])) {
+    for (const r of reviews) {
       let type: string | null = null;
       let severity: string | null = null;
       let confidence = 0.0;
@@ -183,8 +201,7 @@ async function runPipelineBackground() {
 
     pipelineState.processed = totalMlTasks;
 
-    const { data: analyticsRecords, error: analyticsError } = await supabase.from('analytics_traceability_view').select('*');
-    if (analyticsError) throw analyticsError;
+    const analyticsRecords = await selectAll<any>(supabase, 'analytics_traceability_view');
 
     const predictionsMap = new Map(newComplaintPredictions.map(p => [p.review_id, p]));
     const records = analyticsRecords.map(r => {
