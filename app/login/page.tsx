@@ -1,6 +1,13 @@
 import { Suspense } from "react"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { LoginForm } from "@/components/auth/login-form"
+import { DossierPanel } from "@/components/auth/dossier-panel"
+import { getDossierSummary } from "@/lib/dossier-summary"
+
+async function DossierAside() {
+  const summary = await getDossierSummary()
+  return <DossierPanel summary={summary} />
+}
 
 export default function LoginPage() {
   return (
@@ -13,6 +20,11 @@ export default function LoginPage() {
           <span className="border-b border-auth-line-strong text-auth-ink">Hubungi admin tim kamu.</span>
         </p>
       }
+      aside={
+        <Suspense fallback={<aside className="flex h-full items-center justify-center bg-auth-dossier-bg px-10 py-12 text-auth-dossier-stat">Memuat ringkasan pipeline…</aside>}>
+          <DossierAside />
+        </Suspense>
+      }
     >
       <Suspense>
         <LoginForm />
@@ -20,4 +32,3 @@ export default function LoginPage() {
     </AuthShell>
   )
 }
-

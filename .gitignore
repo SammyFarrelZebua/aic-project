@@ -47,3 +47,10 @@ data/analytics_traceability_dataset.json
 data/analytics_traceability_dataset.csv
 data/ground_truth_incidents.csv
 
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

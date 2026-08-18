@@ -6,12 +6,19 @@ interface AuthShellProps {
   subtext: string
   footer?: ReactNode
   children: ReactNode
+  /** Rendered as a full-height panel beside the form on wide screens (e.g. login's live pipeline dossier). */
+  aside?: ReactNode
 }
 
-export function AuthShell({ heading, subtext, footer, children }: AuthShellProps) {
+export function AuthShell({ heading, subtext, footer, children, aside }: AuthShellProps) {
   return (
     <div className="auth-shell flex min-h-screen items-center justify-center bg-auth-paper">
-      <div className="w-full max-w-[540px] border-[0.5px] border-auth-line my-auto">
+      <div className="grid w-full max-w-[980px] border-[0.5px] border-auth-line my-auto lg:grid-cols-2">
+        {aside && (
+          <div className="hidden lg:block">
+            {aside}
+          </div>
+        )}
         <div className="flex flex-col justify-center bg-auth-paper-raised px-10 py-12 min-[540px]:px-[72px] min-[540px]:py-16">
           <Wordmark />
           <h1 className="mb-2.5 font-case text-[26px] font-medium tracking-[-0.01em] text-auth-ink">

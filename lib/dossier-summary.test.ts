@@ -21,7 +21,9 @@ describe('getDossierSummary', () => {
   it('returns hasActivity: false when there are no reviews', async () => {
     mockSupabase.from.mockImplementation((table: string) => {
       return {
-        select: vi.fn().mockResolvedValue({ count: table === 'review' ? null : 0 })
+        select: vi.fn().mockImplementation(() => ({
+          neq: vi.fn().mockResolvedValue({ count: table === 'review' ? null : 0 })
+        }))
       }
     })
 
@@ -51,7 +53,11 @@ describe('getDossierSummary', () => {
               })
             }
           }
-          return { count: 120 }
+          // The `select("*", { count: "exact", head: true })` count call is
+          // chained with `.neq("complaint_type", "NORMAL")` in getDossierSummary.
+          return {
+            neq: vi.fn().mockReturnValue({ count: 120 })
+          }
         })
         return { select: mockSelect }
       }
@@ -76,7 +82,11 @@ describe('getDossierSummary', () => {
           })
         }
       }
-      return { select: vi.fn().mockResolvedValue({ count: 0 }) }
+      return {
+        select: vi.fn().mockImplementation(() => ({
+          neq: vi.fn().mockResolvedValue({ count: 0 })
+        }))
+      }
     })
 
     const summary = await getDossierSummary()
