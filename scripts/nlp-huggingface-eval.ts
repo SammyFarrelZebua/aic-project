@@ -409,12 +409,20 @@ function runAnomalyDetectionAndRanking(records: TraceabilityRecord[]) {
 
   for (const anomaly of detectedAnomalies) {
     let groundTruthWinner = '';
-    if (anomaly.type === 'PRODUCT_DEFECT') groundTruthWinner = 'fact-c';
-    else if (anomaly.type === 'PACKAGING_DAMAGE') groundTruthWinner = 'wh-south';
-    else if (anomaly.type === 'LATE_DELIVERY') groundTruthWinner = 'cour-fast';
+    let groundTruthType: 'factory' | 'warehouse' | 'courier' = 'factory';
+    if (anomaly.type === 'PRODUCT_DEFECT') {
+      groundTruthWinner = 'fact-c';
+      groundTruthType = 'factory';
+    } else if (anomaly.type === 'PACKAGING_DAMAGE') {
+      groundTruthWinner = 'wh-south';
+      groundTruthType = 'warehouse';
+    } else if (anomaly.type === 'LATE_DELIVERY') {
+      groundTruthWinner = 'cour-fast';
+      groundTruthType = 'courier';
+    }
 
     const topCandidate = anomaly.scoredCandidates[0];
-    const isCorrect = topCandidate && topCandidate.id === groundTruthWinner;
+    const isCorrect = topCandidate && topCandidate.id === groundTruthWinner && topCandidate.entityType === groundTruthType;
     if (isCorrect) correctRootCauseCount++;
   }
 
