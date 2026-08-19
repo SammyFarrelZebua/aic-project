@@ -3,8 +3,12 @@
 import React, { useEffect, useState } from "react"
 import { FileSearch, ScanSearch, Radar, Network, ShieldAlert, Loader2, X } from "lucide-react"
 import { cn } from "@/utils/cn"
+import type { PipelineStatus } from "@/types/dashboard"
 
-export type TraceStatus = "idle" | "running" | "done" | "error"
+// Alias kept so existing imports of `TraceStatus` from this module keep
+// working -- the canonical union now lives in types/dashboard.ts alongside
+// the rest of the pipeline's shared shapes.
+export type TraceStatus = PipelineStatus
 
 export interface TraceCounts {
   reviews: number
@@ -19,6 +23,8 @@ interface TraceStripProps {
   counts: TraceCounts | null
   durationMs?: number | null
   errorMessage?: string | null
+  /** Rendered as a small inline action inside the strip while status === "running". */
+  onCancel?: () => void
 }
 
 const NODES = [
@@ -74,19 +80,30 @@ function useStaggeredReveal(status: TraceStatus, reducedMotion: boolean) {
   return revealed
 }
 
-export function TraceStrip({ status, counts, durationMs, errorMessage }: TraceStripProps) {
+export function TraceStrip({ status, counts, durationMs, errorMessage, onCancel }: TraceStripProps) {
   const reducedMotion = usePrefersReducedMotion()
   const revealed = useStaggeredReveal(status, reducedMotion)
 
   const nodeState = (i: number): "pending" | "active" | "done" | "failed" => {
     if (status === "error") return i === 0 ? "failed" : "pending"
-    if (status === "running") return "active"
+    if (status === "running" || status === "cancelling") return "active"
     if (status === "done") return i < revealed ? "done" : "pending"
+    // idle and cancelled share the same "last known state" look: nodes light
+    // up only if there's a previous result to show, otherwise stay pending.
     return counts ? "done" : "pending"
   }
 
   return (
     <div className="relative w-full overflow-x-auto rounded-lg border border-line bg-paper-raised px-4 pt-10 pb-6 sm:px-8">
+      {status === "running" && onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="absolute right-4 top-4 rounded-md border border-alert/40 px-3 py-1.5 text-xs font-case text-alert transition-colors hover:bg-alert/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alert"
+        >
+          Cancel Pipeline
+        </button>
+      )}
       <div className="relative min-w-[560px] h-[92px]">
         <svg
           className="absolute inset-0 h-full w-full"
@@ -100,7 +117,7 @@ export function TraceStrip({ status, counts, durationMs, errorMessage }: TraceSt
             const y2 = LINE_Y[i + 1]
             const midX = (x * 10 + x2 * 10) / 2
             const midY = i % 2 === 0 ? Math.min(y1, y2) - 20 : Math.max(y1, y2) + 20
-            const lit = status === "done" ? i < revealed : status === "idle" && !!counts
+            const lit = status === "done" ? i < revealed : (status === "idle" || status === "cancelled") && !!counts
             return (
               <path
                 key={i}
@@ -112,7 +129,7 @@ export function TraceStrip({ status, counts, durationMs, errorMessage }: TraceSt
                 strokeLinecap="round"
                 className={cn(
                   "transition-[stroke] duration-500",
-                  status === "running" && !reducedMotion && "trace-line-pulse"
+                  (status === "running" || status === "cancelling") && !reducedMotion && "trace-line-pulse"
                 )}
               />
             )
@@ -123,7 +140,7 @@ export function TraceStrip({ status, counts, durationMs, errorMessage }: TraceSt
           const st = nodeState(i)
           const Icon = node.icon
           const pendingReveal = status === "done" && i >= revealed
-          const value = status === "running" ? null : counts ? counts[node.key] : null
+          const value = status === "running" || status === "cancelling" ? null : counts ? counts[node.key] : null
           return (
             <div
               key={node.key}
@@ -164,6 +181,11 @@ export function TraceStrip({ status, counts, durationMs, errorMessage }: TraceSt
       {status === "done" && durationMs != null && (
         <p className="mt-3 text-center text-xs text-ink-muted font-case">
           Selesai dalam {(durationMs / 1000).toFixed(1)}s
+        </p>
+      )}
+      {status === "cancelled" && (
+        <p className="mt-3 text-center text-xs text-ink-muted font-case">
+          Pipeline dibatalkan.
         </p>
       )}
       {status === "error" && errorMessage && (

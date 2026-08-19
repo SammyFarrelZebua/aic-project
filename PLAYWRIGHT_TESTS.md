@@ -70,6 +70,7 @@ Smoke test replacing the Playwright template default.
 | `renders the candidate ranking entries with entity types` | Candidate ranking rows + type badges |
 | `runs the pipeline end-to-end and shows completion` | "Run Pipeline" → running → "Selesai dalam Xs" |
 | `pipeline button is disabled while a run is in progress` | In-flight button state |
+| `cancels a running pipeline and allows an immediate re-run` | Reset-to-empty display on Run, "Cancel Pipeline" -> "Pipeline dibatalkan.", re-run not blocked by the concurrency guard |
 
 ### `tests/cases-alerts.spec.ts` — Cases & alerts
 | Test | Verifies |
@@ -121,6 +122,7 @@ Smoke test replacing the Playwright template default.
 - **Empty-state tests** use Playwright request stubbing (`page.route`) so they don't require wiping the DB.
 - The `tests/` folder is excluded from Vitest (see `vitest.config.ts`), so the unit suite doesn't pick up Playwright specs.
 - **First-run cold start**: the very first test against a freshly-started `npm run dev` can be slow (on-demand webpack compilation of the login/dashboard bundles). If you see timeouts only on the first test of a fresh server, warm it with `curl http://localhost:3000/login` before running the suite, or just re-run — the `webServer.reuseExistingServer` option means subsequent runs hit the already-warm server.
+- **Cancel Pipeline**: added alongside the "reset display on Run" behavior. Clicking Run immediately shows placeholder/empty KPIs and charts (derived display data, never mutating the underlying fetched data) rather than the previous run's stale numbers. Cancel uses a cooperative in-memory flag (`pipelineState.cancelRequested`) checked at the classification loop's existing every-25-review checkpoint -- there is no true task-cancellation primitive, so a cancel clicked during the one-time model load or the synchronous `detectAnomalies()` pass can take a few extra seconds to take effect. A cancelled run leaves `root_cause_predictions` empty and `complaint_prediction` possibly partially populated; this is intentional (the pipeline already deletes-then-repopulates both tables on every run, so partial state is transient) -- see the plan notes in the repo history for the full design rationale.
 
 ## Verified run (2026-08-18)
 

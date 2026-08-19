@@ -2,6 +2,12 @@
 // app/api/analytics/dashboard/route.ts response shapes. Keep in sync if
 // those routes change — do not hand-guess fields here.
 
+// The pipeline's lifecycle as exposed to the UI. 'cancelling'/'cancelled' are
+// client-driven: the server itself only ever reports 'running' up until it
+// settles on 'cancelled' once the cooperative cancellation flag is noticed
+// (see app/api/pipeline/state.ts + app/api/pipeline/run/route.ts).
+export type PipelineStatus = "idle" | "running" | "cancelling" | "cancelled" | "done" | "error";
+
 export type IncidentType = "PRODUCT_DEFECT" | "PACKAGING_DAMAGE" | "LATE_DELIVERY";
 export type CandidateType = "factory" | "warehouse" | "courier";
 

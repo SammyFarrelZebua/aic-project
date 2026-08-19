@@ -62,4 +62,38 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Run Pipeline' }).click();
     await expect(page.getByRole('button', { name: 'Menjalankan Pipeline...' })).toBeDisabled({ timeout: 10_000 });
   });
+
+  test('cancels a running pipeline and allows an immediate re-run', async ({ page }) => {
+    // Shares the same in-process pipelineState as the completion test above,
+    // so this must run in its own worker/serial context -- see
+    // PLAYWRIGHT_TESTS.md for the isolation note.
+    test.setTimeout(120_000);
+
+    await page.getByRole('button', { name: 'Run Pipeline' }).click();
+    await expect(page.getByRole('button', { name: 'Menjalankan Pipeline...' })).toBeVisible({ timeout: 10_000 });
+
+    // The dashboard resets to a clean/empty display the instant Run fires,
+    // instead of showing the previous run's stale KPIs/charts.
+    await expect(page.getByText('—').first()).toBeVisible({ timeout: 5_000 });
+
+    // Give the classification loop a few seconds to actually start before
+    // cancelling, so this exercises a genuine mid-run stop.
+    await page.waitForTimeout(5000);
+    await page.getByRole('button', { name: 'Cancel Pipeline' }).click();
+    await expect(page.getByRole('button', { name: 'Menghentikan Pipeline...' })).toBeVisible({ timeout: 10_000 });
+
+    // The classification loop's cancellation checkpoint fires every 25
+    // reviews, so this should settle well within the polling window.
+    await expect(page.getByText('Pipeline dibatalkan.')).toBeVisible({ timeout: 60_000 });
+
+    // The concurrency guard must not treat "cancelled" as "still running" --
+    // a fresh run should be startable immediately.
+    await expect(page.getByRole('button', { name: 'Run Pipeline' })).toBeEnabled({ timeout: 5_000 });
+    await page.getByRole('button', { name: 'Run Pipeline' }).click();
+    await expect(page.getByRole('button', { name: 'Menjalankan Pipeline...' })).toBeVisible({ timeout: 10_000 });
+
+    // Cancel this one too so the suite doesn't leave a run in flight.
+    await page.getByRole('button', { name: 'Cancel Pipeline' }).click();
+    await expect(page.getByText('Pipeline dibatalkan.')).toBeVisible({ timeout: 60_000 });
+  });
 });

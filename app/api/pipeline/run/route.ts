@@ -7,6 +7,16 @@ import { detectAnomalies } from '@/utils/anomaly-detection';
 import { pipelineState } from '../state';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// Thrown from inside runPipelineBackground() when a cancellation is noticed
+// at a checkpoint. Distinguishes a deliberate user-requested stop from a
+// genuine failure so the outer catch does not report it as an error.
+class PipelineCancelledError extends Error {
+  constructor() {
+    super('Pipeline dibatalkan.');
+    this.name = 'PipelineCancelledError';
+  }
+}
+
 // PostgREST caps .select() at a default max_rows (commonly 1000) unless the
 // full range is requested explicitly, so large tables/views must be paged
 // through rather than fetched with a single unbounded select('*').
@@ -68,8 +78,13 @@ export async function POST() {
   pipelineState.processed = 0;
   pipelineState.duration_ms = 0;
   pipelineState.error = null;
+  pipelineState.cancelRequested = false;
 
   runPipelineBackground().catch((e) => {
+    // A deliberate cancel already settles pipelineState itself (see the
+    // catch inside runPipelineBackground); do not let this fire-and-forget
+    // handler clobber that back to 'error'.
+    if (pipelineState.status === 'cancelled') return;
     pipelineState.status = 'error';
     pipelineState.error = e.message;
   });
@@ -171,6 +186,15 @@ async function runPipelineBackground() {
         if (mlProcessedCount % 25 === 0 || mlProcessedCount === totalMlTasks) {
           pipelineState.processed = mlProcessedCount;
           pipelineState.duration_ms = Date.now() - start;
+
+          // Cooperative cancellation checkpoint -- the only place in the
+          // classification loop where we cheaply notice a cancel request.
+          if (pipelineState.cancelRequested) {
+            pipelineState.status = 'cancelled';
+            pipelineState.duration_ms = Date.now() - start;
+            pipelineState.error = null;
+            throw new PipelineCancelledError();
+          }
         }
       } else {
         type = 'NORMAL';
@@ -201,6 +225,19 @@ async function runPipelineBackground() {
 
     pipelineState.processed = totalMlTasks;
 
+    // A cancel may have arrived after the classification loop's last
+    // checkpoint (e.g. during the insert-chunk loop above) but before we
+    // reach the anomaly-detection/finalization phases below. Catching it
+    // here avoids running the expensive, non-interruptible detectAnomalies()
+    // pass and the root_cause_predictions insert for a run the user already
+    // asked to stop.
+    if (pipelineState.cancelRequested) {
+      pipelineState.status = 'cancelled';
+      pipelineState.duration_ms = Date.now() - start;
+      pipelineState.error = null;
+      return;
+    }
+
     const analyticsRecords = await selectAll<any>(supabase, 'analytics_traceability_view');
 
     const predictionsMap = new Map(newComplaintPredictions.map(p => [p.review_id, p]));
@@ -223,7 +260,17 @@ async function runPipelineBackground() {
       courierIds: (couriers || []).map(c => c.courier_id)
     };
 
+    // detectAnomalies() is fully synchronous (no awaits inside), so a cancel
+    // requested while it is running cannot be noticed until it returns --
+    // see the check immediately below and the plan's documented limitation.
     const detectedAnomalies = detectAnomalies(records, candidateMap);
+
+    if (pipelineState.cancelRequested) {
+      pipelineState.status = 'cancelled';
+      pipelineState.duration_ms = Date.now() - start;
+      pipelineState.error = null;
+      return;
+    }
 
     const dbRootCausePredictions = detectedAnomalies.map(anomaly => ({
       incident_type: anomaly.type,
@@ -248,6 +295,14 @@ async function runPipelineBackground() {
       console.error('Failed to revalidate dashboard-analytics cache tag:', err);
     }
   } catch (err: any) {
+    if (err instanceof PipelineCancelledError || pipelineState.cancelRequested) {
+      // Already settled to 'cancelled' at the throw site (or by the
+      // pre-detectAnomalies/pre-finalize checks above); do not overwrite it
+      // with an 'error' status, and do not propagate this as a real failure.
+      pipelineState.status = 'cancelled';
+      pipelineState.error = null;
+      return;
+    }
     pipelineState.status = 'error';
     pipelineState.error = err.message;
     throw err;

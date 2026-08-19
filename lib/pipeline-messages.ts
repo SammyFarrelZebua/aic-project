@@ -1,6 +1,9 @@
 /** Maps raw API error strings to short, non-technical Indonesian messages for the trace strip. */
 export function friendlyPipelineError(raw: string): string {
   const msg = raw.toLowerCase()
+  if (msg.includes("cancelled") || msg.includes("cancel requested") || msg.includes("dibatalkan")) {
+    return "Pipeline dibatalkan."
+  }
   if (msg.includes("fetch") || msg.includes("network") || msg.includes("econn")) {
     return "Gagal terhubung ke server. Periksa koneksi dan coba lagi."
   }

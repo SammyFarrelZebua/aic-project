@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertCircle, Loader2, Play } from "lucide-react"
+import { AlertCircle, Loader2, Play, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { KpiCard } from "@/components/kpi-card"
 import { TraceStrip, type TraceCounts, type TraceStatus } from "@/components/trace-strip"
@@ -11,6 +11,19 @@ import { averageAnomalyActiveDays } from "@/lib/metrics"
 import { friendlyPipelineError } from "@/lib/pipeline-messages"
 import type { DashboardData, DashboardResponse } from "@/types/dashboard"
 import { cn } from "@/utils/cn"
+
+// Placeholder shown the instant a run starts (and while cancelling), instead
+// of leaving the previous run's KPIs/charts/rankings on screen looking like
+// live results. ComplaintTrendChart and CandidateRanking already render a
+// clean "no data yet" message on empty arrays, so this needs no changes to
+// either component -- only the KPI cards need "—" placeholder strings (done
+// inline below) since KpiCard itself does no empty-state handling.
+const EMPTY_DASHBOARD: DashboardData = {
+  kpis: { totalReviews: null, lowRatings: null, predictedComplaints: null, totalAnomalies: null, accuracy: 0 },
+  timeseries: [],
+  rankings: { factories: [], warehouses: [], couriers: [] },
+  anomalies: [],
+}
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -43,20 +56,45 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (pipelineStatus === "running") {
+    if (pipelineStatus === "running" || pipelineStatus === "cancelling") {
       interval = setInterval(async () => {
         try {
           const res = await fetch("/api/pipeline/status");
           const json = await res.json();
           if (json.success && json.data) {
             setPipelineDuration(json.data.duration_ms);
-            
+
             if (json.data.status === 'done') {
               setPipelineStatus("done");
               await fetchDashboard();
+            } else if (json.data.status === 'cancelled') {
+              // Server confirmed the cooperative cancellation flag was
+              // noticed and the run stopped itself. Tables were cleared at
+              // the start of the run and are only partially/never
+              // repopulated (see PIPELINE_ARCHITECTURE.md / plan notes), so
+              // there is nothing fresh to fetch -- the reset display already
+              // reflects that.
+              setPipelineStatus("cancelled");
+              setPipelineError(null);
             } else if (json.data.status === 'error') {
               setPipelineStatus("error");
               setPipelineError(friendlyPipelineError(json.data.error || "Unknown error"));
+            } else if (json.data.status === 'idle') {
+              // The pipeline's progress lives in an in-memory, single-process
+              // object (app/api/pipeline/state.ts) that resets to "idle" on
+              // any server restart/reload. If we started polling because the
+              // user clicked "Run Pipeline" but the server then bounced
+              // before finishing, we'd otherwise poll forever waiting for a
+              // "done"/"error" that will never arrive -- surface it instead.
+              // (A deliberate cancel always settles on the server's
+              // "cancelled" status above, never "idle", so this branch stays
+              // specific to genuine restarts.)
+              setPipelineStatus("error");
+              setPipelineError(
+                friendlyPipelineError(
+                  "Server restarted while the pipeline was running. Please try again."
+                )
+              );
             }
           }
         } catch (e) {
@@ -82,6 +120,35 @@ export default function DashboardPage() {
     }
   }
 
+  const handleCancelPipeline = async () => {
+    setPipelineStatus("cancelling")
+    setPipelineError(null)
+    try {
+      const res = await fetch("/api/pipeline/cancel", { method: "POST" })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || "Gagal membatalkan pipeline.")
+      // the polling effect keeps running while status === "cancelling" and
+      // picks up the server's "cancelled" status on the next poll.
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : "Gagal membatalkan pipeline."
+      setPipelineError(friendlyPipelineError(raw))
+      // Fall back to "running" rather than "error" -- the pipeline itself
+      // is (as far as we know) still going, only the cancel request failed.
+      setPipelineStatus("running")
+    }
+  }
+
+  const isActive = pipelineStatus === "running" || pipelineStatus === "cancelling"
+
+  // Derived, not a mutation of `data` -- while a run is in flight (or being
+  // cancelled) the dashboard shows a clean reset state instead of the
+  // previous run's numbers; `data` itself stays untouched so a later "done"
+  // fetch, or falling back out of "cancelling", doesn't need any repair.
+  const displayData = useMemo<DashboardData>(
+    () => (isActive ? EMPTY_DASHBOARD : data ?? EMPTY_DASHBOARD),
+    [isActive, data]
+  )
+
   const counts: TraceCounts | null = useMemo(() => {
     if (!data) return null
     return {
@@ -94,8 +161,8 @@ export default function DashboardPage() {
   }, [data])
 
   const avgActiveDays = useMemo(
-    () => (data ? averageAnomalyActiveDays(data.anomalies) : null),
-    [data]
+    () => (displayData ? averageAnomalyActiveDays(displayData.anomalies) : null),
+    [displayData]
   )
 
   if (loadingInitial && !data) {
@@ -148,21 +215,39 @@ export default function DashboardPage() {
             <h2 className="font-case text-xs uppercase tracking-wide text-ink-muted">
               Jejak Pipeline
             </h2>
-            <button
-              onClick={handleRunPipeline}
-              disabled={pipelineStatus === "running"}
-              className={cn(
-                "flex items-center gap-2 rounded-md bg-ink px-5 py-2.5 font-case text-sm text-paper transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cleared"
+            <div className="flex items-center gap-2">
+              {pipelineStatus === "running" && (
+                <button
+                  onClick={handleCancelPipeline}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md border border-alert/50 px-4 py-2.5 font-case text-sm text-alert transition-colors hover:bg-alert/10",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alert"
+                  )}
+                >
+                  <X className="h-4 w-4" />
+                  Cancel Pipeline
+                </button>
               )}
-            >
-              {pipelineStatus === "running" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {pipelineStatus === "running" ? "Menjalankan Pipeline..." : "Run Pipeline"}
-            </button>
+              <button
+                onClick={handleRunPipeline}
+                disabled={isActive}
+                className={cn(
+                  "flex items-center gap-2 rounded-md bg-ink px-5 py-2.5 font-case text-sm text-paper transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cleared"
+                )}
+              >
+                {isActive ? (
+                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {pipelineStatus === "cancelling"
+                  ? "Menghentikan Pipeline..."
+                  : pipelineStatus === "running"
+                    ? "Menjalankan Pipeline..."
+                    : "Run Pipeline"}
+              </button>
+            </div>
           </div>
           <TraceStrip
             status={pipelineStatus}
@@ -175,23 +260,23 @@ export default function DashboardPage() {
         <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
             label="Akurasi Deteksi (Top-1)"
-            value={`${data!.kpis.accuracy.toFixed(0)}%`}
+            value={isActive ? "—" : `${displayData.kpis.accuracy.toFixed(0)}%`}
             sublabel="vs. insiden ground truth"
             emphasize
           />
           <KpiCard
             label="Insiden Terdeteksi"
-            value={(data!.kpis.totalAnomalies ?? 0).toLocaleString("id-ID")}
+            value={isActive ? "—" : (displayData.kpis.totalAnomalies ?? 0).toLocaleString("id-ID")}
           />
           <KpiCard
             label="Durasi Anomali Aktif"
-            value={avgActiveDays != null ? `${avgActiveDays.toFixed(1)} hari` : "—"}
+            value={!isActive && avgActiveDays != null ? `${avgActiveDays.toFixed(1)} hari` : "—"}
             sublabel="rata-rata per kasus"
           />
           <KpiCard
             label="Review Diproses"
-            value={(data!.kpis.totalReviews ?? 0).toLocaleString("id-ID")}
-            sublabel={`${(data!.kpis.lowRatings ?? 0).toLocaleString("id-ID")} rating ≤ 2`}
+            value={isActive ? "—" : (displayData.kpis.totalReviews ?? 0).toLocaleString("id-ID")}
+            sublabel={isActive ? undefined : `${(displayData.kpis.lowRatings ?? 0).toLocaleString("id-ID")} rating ≤ 2`}
           />
         </section>
 
@@ -203,7 +288,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ComplaintTrendChart timeseries={data!.timeseries} anomalies={data!.anomalies} />
+              <ComplaintTrendChart timeseries={displayData.timeseries} anomalies={displayData.anomalies} />
             </CardContent>
           </Card>
 
@@ -214,7 +299,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <CandidateRanking rankings={data!.rankings} anomalies={data!.anomalies} />
+              <CandidateRanking rankings={displayData.rankings} anomalies={displayData.anomalies} />
             </CardContent>
           </Card>
         </section>
