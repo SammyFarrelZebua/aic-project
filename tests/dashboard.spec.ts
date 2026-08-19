@@ -43,10 +43,13 @@ test.describe('Dashboard', () => {
   });
 
   test('runs the pipeline end-to-end and shows completion', async ({ page }) => {
-    // Classifies ~15k reviews in-process (Transformers.js) — on a loaded dev
-    // machine this has been observed to run past 3 minutes, so give it a
-    // generous budget. The test's own timeout must exceed the assertion's.
-    test.setTimeout(360_000);
+    // Classifies ~15k reviews in-process (Transformers.js). Measured wall-clock
+    // across several clean (uncontended) runs on this machine: 220s, 250s,
+    // 258s -- and one run that ran past 300s and tripped the previous 300s
+    // assertion timeout right at the edge. 300s has essentially no margin;
+    // give this real headroom instead of nudging it a few seconds at a time.
+    // The test's own timeout must exceed the assertion's.
+    test.setTimeout(600_000);
 
     // Click "Run Pipeline"; the trace strip should enter running state.
     await page.getByRole('button', { name: 'Run Pipeline' }).click();
@@ -55,7 +58,7 @@ test.describe('Dashboard', () => {
     await expect(page.getByRole('button', { name: 'Menjalankan Pipeline...' })).toBeVisible({ timeout: 10_000 });
 
     // Polling every 2s → completion (the "Selesai dalam ..." line appears).
-    await expect(page.getByText(/Selesai dalam \d+(\.\d+)?s/)).toBeVisible({ timeout: 300_000 });
+    await expect(page.getByText(/Selesai dalam \d+(\.\d+)?s/)).toBeVisible({ timeout: 540_000 });
   });
 
   test('pipeline button is disabled while a run is in progress', async ({ page }) => {

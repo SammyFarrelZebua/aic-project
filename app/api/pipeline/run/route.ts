@@ -92,28 +92,6 @@ export async function POST() {
   return NextResponse.json({ success: true, message: 'Pipeline started' });
 }
 
-// Supabase/PostgREST caps a plain .select() at 1000 rows. Loop with .range() to pull all reviews.
-async function fetchAllReviews(supabase: ReturnType<typeof createServiceClient>): Promise<any[]> {
-  const allReviews: any[] = [];
-  const pageSize = 1000;
-  let from = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from('review')
-      .select('*')
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    allReviews.push(...data);
-    from += pageSize;
-    hasMore = data.length === pageSize;
-  }
-
-  return allReviews;
-}
-
 async function runPipelineBackground() {
   const start = Date.now();
   const supabase = createServiceClient();
@@ -122,16 +100,12 @@ async function runPipelineBackground() {
     await supabase.from('root_cause_predictions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('complaint_prediction').delete().neq('prediction_id', '00000000-0000-0000-0000-000000000000');
 
-<<<<<<< HEAD
     const reviews = await selectAll<any>(supabase, 'review');
-=======
-    const reviews = await fetchAllReviews(supabase);
     console.log(`[Pipeline] Fetched ${reviews.length} reviews total`);
 
     let bypassCount = 0;
     let mlEvaluatedCount = 0;
     let nonNormalCount = 0;
->>>>>>> 5b4cc29ca070f5e81caf08ac8bb2fc504cbc78ef
 
     const newComplaintPredictions = [];
 
@@ -329,8 +303,7 @@ async function runPipelineBackground() {
     } catch (err) {
       console.error('Failed to revalidate dashboard-analytics cache tag:', err);
     }
-<<<<<<< HEAD
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof PipelineCancelledError || pipelineState.cancelRequested) {
       // Already settled to 'cancelled' at the throw site (or by the
       // pre-detectAnomalies/pre-finalize checks above); do not overwrite it
@@ -339,10 +312,7 @@ async function runPipelineBackground() {
       pipelineState.error = null;
       return;
     }
-=======
-  } catch (err: unknown) {
     const error = err as Error;
->>>>>>> 83659bb7a63d5aa0a196fc113e6a077abd857c2b
     pipelineState.status = 'error';
     pipelineState.error = error.message;
     throw err;

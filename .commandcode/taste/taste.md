@@ -1,7 +1,0 @@
-- Prefers comprehensive exploration and documentation using parallel specialized agents, combining all findings without missing a single detail. Confidence: 0.85
-- Prefers creating documentation as markdown files placed in the project directory. Confidence: 0.85
-- Prefers hand-crafting data generation by hand rather than scripting when there are quality issues like duplicates or empty content. Confidence: 0.7
-- Prefers datasets to include ground truth labels for evaluation. Confidence: 0.7
-- Prefers actually executing and verifying work end-to-end (pushing to databases, running the real app) rather than only analyzing or scripting. Confidence: 0.85
-- Fixes bugs in real production code, not just scratch/test scripts. Confidence: 0.75
-- Keeps CLAUDE.md in sync with actual codebase state. Confidence: 0.8

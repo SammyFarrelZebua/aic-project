@@ -29,8 +29,12 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Masuk' }).click();
 
     // Scope past Next.js's own route-announcer, which also has role="alert".
+    // Give this real headroom -- Supabase's signInWithPassword round-trip
+    // plus a shallow Next.js URL normalization (a "/login?" reload with no
+    // real navigation) can occasionally still be in flight past the 5s
+    // default when the dev server is busy.
     const errorBanner = page.getByRole('alert').filter({ hasText: /salah|Invalid/i });
-    await expect(errorBanner).toBeVisible();
+    await expect(errorBanner).toBeVisible({ timeout: 15_000 });
   });
 
   test('forgot-password page renders with the static panel', async ({ page }) => {
