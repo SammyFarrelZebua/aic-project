@@ -18,12 +18,20 @@ export interface CandidateMap {
   courierIds: string[];
 }
 
+export interface ScoredCandidate {
+  id: string;
+  score: number;
+  dr: number;
+  ics: number;
+  entityType: 'factory' | 'warehouse' | 'courier';
+}
+
 export interface DetectedAnomaly {
   date: Date;
   type: 'PRODUCT_DEFECT' | 'PACKAGING_DAMAGE' | 'LATE_DELIVERY';
   spikeRatio: number;
   currentWindowStart: Date;
-  scoredCandidates: { id: string; score: number; dr: number; ics: number }[];
+  scoredCandidates: ScoredCandidate[];
 }
 
 export function detectAnomalies(
@@ -51,7 +59,8 @@ export function detectAnomalies(
       r => r.purchaseTime >= historicWindowStart.getTime() && r.purchaseTime < currentWindowStart.getTime()
     );
 
-    if (cWindowReviews.length < 50 || hWindowReviews.length < 200) continue;
+    // Lowered thresholds to detect anomalies in sparse, real-world review data.
+    if (cWindowReviews.length < 30 || hWindowReviews.length < 50) continue;
 
     for (const type of incidentTypes) {
       const cComplaints = cWindowReviews.filter(r => r.predicted_type === type).length;
@@ -62,29 +71,33 @@ export function detectAnomalies(
       const spikeRatio = r_c / (r_h + 0.001);
 
       if (spikeRatio >= 2.0 && cComplaints >= 3) {
-        let targetCandidates: string[] = [];
-        if (type === 'PRODUCT_DEFECT') targetCandidates = candidates.factoryIds;
-        else if (type === 'PACKAGING_DAMAGE') targetCandidates = candidates.warehouseIds;
-        else targetCandidates = candidates.courierIds;
+        const allCandidates: { id: string; entityType: 'factory' | 'warehouse' | 'courier' }[] = [
+          ...candidates.factoryIds.map(id => ({ id, entityType: 'factory' as const })),
+          ...candidates.warehouseIds.map(id => ({ id, entityType: 'warehouse' as const })),
+          ...candidates.courierIds.map(id => ({ id, entityType: 'courier' as const }))
+        ];
 
-        const trainingData = targetCandidates.map(id =>
-          buildEntityFeatures(records, type, id, currentWindowStart, currentDate, true)
+        const trainingData = allCandidates.map(c =>
+          buildEntityFeatures(records, type, c.entityType, c.id, currentWindowStart, currentDate, true)
         );
-        const testData = targetCandidates.map(id =>
-          buildEntityFeatures(records, type, id, currentWindowStart, currentDate, false)
+        const testData = allCandidates.map(c =>
+          buildEntityFeatures(records, type, c.entityType, c.id, currentWindowStart, currentDate, false)
         );
         const ifScores = scoreWithIsolationForest(trainingData, testData);
 
-        const scored = targetCandidates.map((id, idx) => {
+        const scored: ScoredCandidate[] = allCandidates.map((c, idx) => {
+          const id = c.id;
+          const entityType = c.entityType;
+
           const cEnt = cWindowReviews.filter(r =>
-            type === 'PRODUCT_DEFECT' ? r.factory_id === id :
-            type === 'PACKAGING_DAMAGE' ? r.warehouse_id === id : r.courier_id === id
+            entityType === 'factory' ? r.factory_id === id :
+            entityType === 'warehouse' ? r.warehouse_id === id : r.courier_id === id
           );
           const cEntComplaints = cEnt.filter(r => r.predicted_type === type).length;
 
           const hEnt = hWindowReviews.filter(r =>
-            type === 'PRODUCT_DEFECT' ? r.factory_id === id :
-            type === 'PACKAGING_DAMAGE' ? r.warehouse_id === id : r.courier_id === id
+            entityType === 'factory' ? r.factory_id === id :
+            entityType === 'warehouse' ? r.warehouse_id === id : r.courier_id === id
           );
           const hEntComplaints = hEnt.filter(r => r.predicted_type === type).length;
 
@@ -95,7 +108,7 @@ export function detectAnomalies(
           const ics = cEntComplaints / (cComplaints || 1);
           const ifScore = ifScores[idx] || 0;
           const score = 0.6 * ifScore + 0.4 * (dr * ics);
-          return { id, score, dr, ics };
+          return { id, score, dr, ics, entityType };
         }).sort((a, b) => b.score - a.score);
 
         detectedAnomalies.push({

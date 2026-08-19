@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { detectAnomalies } from '../utils/anomaly-detection';
 
 const DATASET_PATH = path.join(process.cwd(), 'data', 'analytics_traceability_dataset.json');
 
@@ -72,7 +71,7 @@ async function run() {
   const { pipeline, env } = await import('@huggingface/transformers');
   env.allowLocalModels = false;
 
-  const classifier = await pipeline('zero-shot-classification', 'Xenova/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7', { quantized: true } as any);
+  const classifier = await pipeline('zero-shot-classification', 'Xenova/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7', { quantized: true } as unknown as Record<string, unknown>);
 
   const candidateLabels = [
     'cacat produk atau kualitas barang buruk',

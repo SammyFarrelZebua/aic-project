@@ -92,6 +92,28 @@ export async function POST() {
   return NextResponse.json({ success: true, message: 'Pipeline started' });
 }
 
+// Supabase/PostgREST caps a plain .select() at 1000 rows. Loop with .range() to pull all reviews.
+async function fetchAllReviews(supabase: ReturnType<typeof createServiceClient>): Promise<any[]> {
+  const allReviews: any[] = [];
+  const pageSize = 1000;
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('review')
+      .select('*')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allReviews.push(...data);
+    from += pageSize;
+    hasMore = data.length === pageSize;
+  }
+
+  return allReviews;
+}
+
 async function runPipelineBackground() {
   const start = Date.now();
   const supabase = createServiceClient();
@@ -100,7 +122,16 @@ async function runPipelineBackground() {
     await supabase.from('root_cause_predictions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('complaint_prediction').delete().neq('prediction_id', '00000000-0000-0000-0000-000000000000');
 
+<<<<<<< HEAD
     const reviews = await selectAll<any>(supabase, 'review');
+=======
+    const reviews = await fetchAllReviews(supabase);
+    console.log(`[Pipeline] Fetched ${reviews.length} reviews total`);
+
+    let bypassCount = 0;
+    let mlEvaluatedCount = 0;
+    let nonNormalCount = 0;
+>>>>>>> 5b4cc29ca070f5e81caf08ac8bb2fc504cbc78ef
 
     const newComplaintPredictions = [];
 
@@ -125,11 +156,12 @@ async function runPipelineBackground() {
 
         if (!productDefectRegex.test(text) && !packagingDamageRegex.test(text) && !lateDeliveryRegex.test(text)) {
           type = 'NORMAL';
+          bypassCount++;
         } else {
           if (!cachedClassifier) {
             const { pipeline, env } = await import('@huggingface/transformers');
             env.allowLocalModels = false;
-            cachedClassifier = (await pipeline('zero-shot-classification', 'Xenova/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7', { quantized: true } as any)) as unknown as ClassifierFn;
+            cachedClassifier = (await pipeline('zero-shot-classification', 'Xenova/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7', { quantized: true } as unknown as Record<string, unknown>)) as unknown as ClassifierFn;
           }
 
           const candidateLabels = [
@@ -167,12 +199,14 @@ async function runPipelineBackground() {
             if (r.rating === 1) threshold = 0.20;
             else if (r.rating === 2) threshold = 0.25;
 
+            mlEvaluatedCount++;
             if (topComplaint.score - prob_normal < 0.18) {
               type = 'NORMAL';
             } else if (topComplaint.score >= threshold) {
               type = topComplaint.type;
               confidence = topComplaint.score;
               severity = r.rating === 1 ? 'HIGH' : r.rating === 2 ? 'MEDIUM' : 'LOW';
+              nonNormalCount++;
             } else {
               type = 'NORMAL';
             }
@@ -223,6 +257,7 @@ async function runPipelineBackground() {
       }
     }
 
+    console.log(`[Pipeline] ML bypassed: ${bypassCount}, ML evaluated: ${mlEvaluatedCount}, non-NORMAL predicted: ${nonNormalCount}`);
     pipelineState.processed = totalMlTasks;
 
     // A cancel may have arrived after the classification loop's last
@@ -276,7 +311,7 @@ async function runPipelineBackground() {
       incident_type: anomaly.type,
       detected_period_start: anomaly.currentWindowStart.toISOString(),
       detected_period_end: anomaly.date.toISOString(),
-      candidate_type: anomaly.type === 'PRODUCT_DEFECT' ? 'factory' : anomaly.type === 'PACKAGING_DAMAGE' ? 'warehouse' : 'courier',
+      candidate_type: anomaly.scoredCandidates[0]?.entityType || 'unknown',
       candidate_id: anomaly.scoredCandidates[0]?.id,
       confidence: Math.min(0.999, (anomaly.scoredCandidates[0]?.score || 0) / 100)
     })).filter(p => p.candidate_id);
@@ -294,6 +329,7 @@ async function runPipelineBackground() {
     } catch (err) {
       console.error('Failed to revalidate dashboard-analytics cache tag:', err);
     }
+<<<<<<< HEAD
   } catch (err: any) {
     if (err instanceof PipelineCancelledError || pipelineState.cancelRequested) {
       // Already settled to 'cancelled' at the throw site (or by the
@@ -303,8 +339,12 @@ async function runPipelineBackground() {
       pipelineState.error = null;
       return;
     }
+=======
+  } catch (err: unknown) {
+    const error = err as Error;
+>>>>>>> 83659bb7a63d5aa0a196fc113e6a077abd857c2b
     pipelineState.status = 'error';
-    pipelineState.error = err.message;
+    pipelineState.error = error.message;
     throw err;
   }
 }

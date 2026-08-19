@@ -171,21 +171,29 @@ function runAnomalyDetectionAndRanking(records: TraceabilityRecord[]) {
 
   for (const anomaly of detectedAnomalies) {
     let groundTruthWinner = '';
-    if (anomaly.type === 'PRODUCT_DEFECT') groundTruthWinner = 'fact-c';
-    else if (anomaly.type === 'PACKAGING_DAMAGE') groundTruthWinner = 'wh-south';
-    else if (anomaly.type === 'LATE_DELIVERY') groundTruthWinner = 'cour-fast';
+    let groundTruthType: 'factory' | 'warehouse' | 'courier' = 'factory';
+    if (anomaly.type === 'PRODUCT_DEFECT') {
+      groundTruthWinner = 'fact-c';
+      groundTruthType = 'factory';
+    } else if (anomaly.type === 'PACKAGING_DAMAGE') {
+      groundTruthWinner = 'wh-south';
+      groundTruthType = 'warehouse';
+    } else if (anomaly.type === 'LATE_DELIVERY') {
+      groundTruthWinner = 'cour-fast';
+      groundTruthType = 'courier';
+    }
 
     const topCandidate = anomaly.scoredCandidates[0];
-    const isCorrect = topCandidate && topCandidate.id === groundTruthWinner;
+    const isCorrect = topCandidate && topCandidate.id === groundTruthWinner && topCandidate.entityType === groundTruthType;
     if (isCorrect) correctRootCauseCount++;
 
     console.log(`\n[ANOMALY DETECTED] Date: ${anomaly.date.toISOString().split('T')[0]} | Type: ${anomaly.type}`);
     console.log(`  Spike Ratio: ${anomaly.spikeRatio.toFixed(2)}x`);
     console.log(`  Candidates Ranking (Top 3):`);
     anomaly.scoredCandidates.slice(0, 3).forEach((c, idx) => {
-      console.log(`    ${idx + 1}. ID: ${c.id.padEnd(12)} | Score: ${c.score.toFixed(4)} (DR: ${c.dr.toFixed(2)}x, Share: ${(c.ics*100).toFixed(1)}%)`);
+      console.log(`    ${idx + 1}. [${c.entityType}] ID: ${c.id.padEnd(12)} | Score: ${c.score.toFixed(4)} (DR: ${c.dr.toFixed(2)}x, Share: ${(c.ics*100).toFixed(1)}%)`);
     });
-    console.log(`  Ground Truth Root Cause: ${groundTruthWinner}`);
+    console.log(`  Ground Truth Root Cause: [${groundTruthType}] ${groundTruthWinner}`);
     console.log(`  Diagnosis Result: ${isCorrect ? '✅ SUCCESS' : '❌ FAILED'}`);
   }
 

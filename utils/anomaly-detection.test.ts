@@ -45,13 +45,14 @@ describe('detectAnomalies', () => {
     };
 
     const anomalies = detectAnomalies(records, candidateMap);
-    
+
     expect(anomalies.length).toBeGreaterThan(0);
     const defectAnomaly = anomalies.find(a => a.type === 'PRODUCT_DEFECT');
     expect(defectAnomaly).toBeDefined();
     expect(defectAnomaly?.spikeRatio).toBeGreaterThan(2.0);
-    
+
     const topCandidate = defectAnomaly?.scoredCandidates[0];
     expect(topCandidate?.id).toBe('factory-1');
+    expect(topCandidate?.entityType).toBe('factory');
   });
 });
