@@ -1,4 +1,4 @@
-import { IsolationForest } from 'isolation-forest';
+import { IsolationForest, DataObject } from 'isolation-forest';
 import { AnomalyRecord } from './anomaly-detection';
 
 /**
@@ -93,8 +93,9 @@ export function scoreWithIsolationForest(
   }
 
   const inf = new IsolationForest(numberOfTrees, trainingData.length);
-  const trainObjects = trainingData.map(row => ({ ...row }));
-  const testObjects = testData.map(row => ({ ...row }));
+  const toDataObject = (row: number[]): DataObject => Object.fromEntries(row.map((v, i) => [i, v]));
+  const trainObjects = trainingData.map(toDataObject);
+  const testObjects = testData.map(toDataObject);
 
   inf.fit(trainObjects);
   const rawScores = inf.predict(testObjects);
