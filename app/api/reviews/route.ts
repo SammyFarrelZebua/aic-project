@@ -22,28 +22,54 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Build review query WITHOUT embedding complaint_prediction (the joined query
-  // times out on 15k+ rows). We select predictions in a second pass instead.
-  let query = supabase.from('review').select('*', { count: 'exact' })
+  // If filtering by complaint type, resolve matching review_ids first so the
+  // filter can be applied server-side, before pagination -- complaint_prediction
+  // is cheap to query for this since only a small fraction of rows are non-NORMAL.
+  let typeReviewIds: string[] | null = null
+  if (type !== 'All') {
+    const { data: typeRows, error: typeError } = await supabase
+      .from('complaint_prediction')
+      .select('review_id')
+      .eq('complaint_type', type)
+
+    if (typeError) {
+      return NextResponse.json({ error: typeError.message }, { status: 500 })
+    }
+    typeReviewIds = (typeRows || []).map(r => r.review_id)
+    if (typeReviewIds.length === 0) {
+      return NextResponse.json({ data: [], count: 0, page, limit })
+    }
+  }
+
+  // Query analytics_traceability_view (not the raw `review` table) so entity
+  // filters (factory/warehouse/courier) can be applied directly -- review.order_id
+  // is an order UUID, not a factory/warehouse/courier id, so filtering the raw
+  // table can never match.
+  let query = supabase
+    .from('analytics_traceability_view')
+    .select('review_id, review_score, review_comment_message, review_creation_date', { count: 'exact' })
 
   if (search) {
-    query = query.ilike('review_text', `%${search}%`)
+    query = query.ilike('review_comment_message', `%${search}%`)
   }
 
   if (rating !== 'All') {
-    query = query.eq('rating', parseInt(rating, 10))
+    query = query.eq('review_score', parseInt(rating, 10))
   }
 
   if (factoryId) {
-    // Filter via order -> batch -> factory
-    query = query.eq('order_id', factoryId)
+    query = query.eq('factory_id', factoryId)
   } else if (warehouseId) {
-    query = query.eq('order_id', warehouseId)
+    query = query.eq('warehouse_id', warehouseId)
   } else if (courierId) {
-    query = query.eq('order_id', courierId)
+    query = query.eq('courier_id', courierId)
   }
 
-  query = query.order('review_date', { ascending: false })
+  if (typeReviewIds) {
+    query = query.in('review_id', typeReviewIds)
+  }
+
+  query = query.order('review_creation_date', { ascending: false })
   query = query.range(offset, offset + limit - 1)
 
   const { data, count, error } = await query
@@ -52,7 +78,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const reviews = data || []
+  const reviews = (data || []).map(r => ({
+    review_id: r.review_id,
+    review_date: r.review_creation_date,
+    rating: r.review_score,
+    review_text: r.review_comment_message
+  }))
   const reviewIds = reviews.map(r => r.review_id)
 
   let predictions: any[] = []
@@ -73,13 +104,5 @@ export async function GET(request: Request) {
     complaint_prediction: predictions.filter(p => p.review_id === r.review_id)
   }))
 
-  // If a type filter was requested, apply it in-memory (since we no longer filter server-side)
-  let result = reviewsWithPreds
-  if (type !== 'All') {
-    result = reviewsWithPreds.filter(r =>
-      r.complaint_prediction && r.complaint_prediction.length > 0 && r.complaint_prediction[0].complaint_type === type
-    )
-  }
-
-  return NextResponse.json({ data: result, count, page, limit })
+  return NextResponse.json({ data: reviewsWithPreds, count, page, limit })
 }

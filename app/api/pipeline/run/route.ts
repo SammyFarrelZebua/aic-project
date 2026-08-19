@@ -122,16 +122,12 @@ async function runPipelineBackground() {
     await supabase.from('root_cause_predictions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('complaint_prediction').delete().neq('prediction_id', '00000000-0000-0000-0000-000000000000');
 
-<<<<<<< HEAD
-    const reviews = await selectAll<any>(supabase, 'review');
-=======
     const reviews = await fetchAllReviews(supabase);
     console.log(`[Pipeline] Fetched ${reviews.length} reviews total`);
 
     let bypassCount = 0;
     let mlEvaluatedCount = 0;
     let nonNormalCount = 0;
->>>>>>> 5b4cc29ca070f5e81caf08ac8bb2fc504cbc78ef
 
     const newComplaintPredictions = [];
 
@@ -329,20 +325,8 @@ async function runPipelineBackground() {
     } catch (err) {
       console.error('Failed to revalidate dashboard-analytics cache tag:', err);
     }
-<<<<<<< HEAD
-  } catch (err: any) {
-    if (err instanceof PipelineCancelledError || pipelineState.cancelRequested) {
-      // Already settled to 'cancelled' at the throw site (or by the
-      // pre-detectAnomalies/pre-finalize checks above); do not overwrite it
-      // with an 'error' status, and do not propagate this as a real failure.
-      pipelineState.status = 'cancelled';
-      pipelineState.error = null;
-      return;
-    }
-=======
   } catch (err: unknown) {
     const error = err as Error;
->>>>>>> 83659bb7a63d5aa0a196fc113e6a077abd857c2b
     pipelineState.status = 'error';
     pipelineState.error = error.message;
     throw err;

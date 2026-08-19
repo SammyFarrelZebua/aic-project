@@ -80,7 +80,6 @@ export default function DashboardPage() {
               setPipelineStatus("error");
               setPipelineError(friendlyPipelineError(json.data.error || "Unknown error"));
             } else if (json.data.status === 'idle') {
-<<<<<<< HEAD
               // The pipeline's progress lives in an in-memory, single-process
               // object (app/api/pipeline/state.ts) that resets to "idle" on
               // any server restart/reload. If we started polling because the
@@ -96,11 +95,6 @@ export default function DashboardPage() {
                   "Server restarted while the pipeline was running. Please try again."
                 )
               );
-=======
-              // Pipeline finished/has no active background job — stop the running state.
-              setPipelineStatus("idle");
-              await fetchDashboard();
->>>>>>> 83659bb7a63d5aa0a196fc113e6a077abd857c2b
             }
           }
         } catch (e) {

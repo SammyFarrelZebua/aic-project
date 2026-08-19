@@ -6,6 +6,17 @@ import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
+// Supabase's PostgrestError is a plain object (not an Error instance), so a
+// bare `error instanceof Error` check falls through to a generic message and
+// hides the actual database/API error (e.g. "Invalid API key").
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
+    return (error as { message: string }).message || 'Unknown error';
+  }
+  return 'Unknown error';
+}
+
 async function fetchDashboardData() {
   const supabase = createServiceClient();
 
@@ -141,7 +152,6 @@ export async function GET(request: NextRequest) {
     const data = isFresh ? await fetchDashboardData() : await getCachedDashboardData();
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }
