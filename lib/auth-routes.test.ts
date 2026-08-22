@@ -10,7 +10,6 @@ describe('isProtectedPath', () => {
     expect(isProtectedPath('/dashboard')).toBe(true)
     expect(isProtectedPath('/cases')).toBe(true)
     expect(isProtectedPath('/entities')).toBe(true)
-    expect(isProtectedPath('/products')).toBe(true)
     expect(isProtectedPath('/alerts')).toBe(true)
     expect(isProtectedPath('/reviews')).toBe(true)
     expect(isProtectedPath('/settings')).toBe(true)
@@ -29,6 +28,10 @@ describe('isProtectedPath', () => {
     expect(isProtectedPath('/login')).toBe(false)
     expect(isProtectedPath('/forgot-password')).toBe(false)
     expect(isProtectedPath('/about')).toBe(false)
+  })
+
+  it('no longer protects /products -- the Produk page was removed', () => {
+    expect(isProtectedPath('/products')).toBe(false)
   })
 })
 

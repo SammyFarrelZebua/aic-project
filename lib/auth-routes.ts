@@ -6,7 +6,7 @@
 const PROTECTED_EXACT = ["/"]
 
 /** Prefix-matched protected sections -- covers all sub-routes underneath. */
-const PROTECTED_PREFIXES = ["/dashboard", "/cases", "/entities", "/products", "/alerts", "/reviews", "/settings"]
+const PROTECTED_PREFIXES = ["/dashboard", "/cases", "/entities", "/alerts", "/reviews", "/settings"]
 
 /** Pages an already-authenticated user shouldn't see -- bounced to /dashboard instead. */
 const AUTH_ONLY_PAGES = ["/login", "/forgot-password"]

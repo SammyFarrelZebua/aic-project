@@ -12,7 +12,6 @@ test.describe('Sidebar navigation', () => {
       { label: 'Beranda', path: /\/dashboard/ },
       { label: 'Ulasan', path: /\/reviews/ },
       { label: 'Kasus', path: /\/cases/ },
-      { label: 'Produk', path: /\/products/ },
       { label: 'Peringatan', path: /\/alerts/ },
       { label: 'Pengaturan', path: /\/settings/ },
     ];

@@ -34,7 +34,7 @@ Schema lives in 7 migrations under `supabase/migrations/`:
   * `review` -> `complaint_prediction` (NLP output)
   * `incidents` (synthetic ground truth) and `root_cause_predictions` (pipeline output, evaluated against `incidents`)
 * `20260812000000_add_profiles.sql` — `profiles` table (the only RLS-enabled table, auto-provisioned via trigger on `auth.users`)
-* `20260816000000_product_stats_view.sql` — `product_stats_view` (per-product order/complaint counts, `needs_alert` flag)
+* `20260816000000_product_stats_view.sql` — `product_stats_view` (per-product order/complaint counts, `needs_alert` flag). **Orphaned as of 2026-08-22**: its only consumer, the `/products` (Produk) page, was removed from the app; the view itself is untouched (migrations aren't retroactively edited/dropped) but nothing currently reads it.
 * `20260816000001_add_fk_indexes.sql` — 9 FK indexes for the core tables
 * `20260816000002_daily_complaints_view.sql` — `daily_complaints_view` (per-day review + complaint-type counts for the dashboard timeseries)
 * `20260816000003_add_nlp_probabilities.sql` — adds `prob_product_defect` / `prob_packaging_damage` / `prob_late_delivery` multi-class columns to `complaint_prediction`
@@ -46,7 +46,7 @@ Supabase client helpers live in `utils/supabase/`: `client.ts` (browser), `serve
 
 ### Routing & auth
 * This Next.js version uses **`proxy.ts`** (not `middleware.ts`) as the routing guard. It routes through `utils/supabase/middleware.ts` for session refresh and route protection.
-* Protected routes and auth-only pages are centralized in `lib/auth-routes.ts` (`isProtectedPath` / `isAuthOnlyPath`). Protected: `/dashboard`, `/cases`, `/entities`, `/products`, `/alerts`, `/reviews`, `/settings` (and `/`). Auth-only: `/login`, `/forgot-password`.
+* Protected routes and auth-only pages are centralized in `lib/auth-routes.ts` (`isProtectedPath` / `isAuthOnlyPath`). Protected: `/dashboard`, `/cases`, `/entities`, `/alerts`, `/reviews`, `/settings` (and `/`). Auth-only: `/login`, `/forgot-password`.
 * `app/page.tsx` redirects `/` -> `/dashboard` (also configured in `next.config.ts`).
 
 ### Inference & anomaly pipeline (`app/api/pipeline/run/route.ts`)
@@ -66,7 +66,6 @@ The app UI lives under a `(dashboard)` route group with a sidebar layout:
 * `app/(dashboard)/cases/page.tsx` + `cases/[id]/page.tsx` — anomaly case list and detail dossier with entity-correlated review evidence (reads `analytics_traceability_view`).
 * `app/(dashboard)/alerts/page.tsx` — alert cards from `root_cause_predictions`.
 * `app/(dashboard)/entities/{factories,warehouses,couriers}/` — list + detail pages with per-entity anomaly counts.
-* `app/(dashboard)/products/page.tsx` — searchable product stats from `product_stats_view`.
 * `app/(dashboard)/reviews/page.tsx` — filterable review list (search/type/rating/entity) reading `/api/reviews`.
 * `app/(dashboard)/settings/page.tsx` — auth user profile + system info.
 * Auth pages: `app/login`, `app/forgot-password`, `app/reset-password`, and `app/auth/confirm` (email OTP handler). The login page renders a live pipeline "dossier" panel (`components/auth/dossier-panel.tsx` fed by `lib/dossier-summary.ts`); forgot/reset use `components/auth/static-panel.tsx`.

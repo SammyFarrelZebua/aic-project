@@ -73,7 +73,7 @@ LEFT JOIN warehouse w ON o.warehouse_id = w.warehouse_id
 LEFT JOIN courier c  ON s.courier_id = c.courier_id;
 ```
 
-**`product_stats_view`** *(undocumented)* — per product: `order_count`, `complaint_count`, `complaint_ratio`, and a boolean `needs_alert` flag that flips true when `complaint_ratio > 0.1`.
+**`product_stats_view`** *(undocumented, and orphaned as of 2026-08-22)* — per product: `order_count`, `complaint_count`, `complaint_ratio`, and a boolean `needs_alert` flag that flips true when `complaint_ratio > 0.1`. Its only consumer, the `/products` (Produk) page, was removed from the app; the view itself was left in place (migrations aren't retroactively dropped), it's just unread now.
 
 **`daily_complaints_view`** *(undocumented)* — two CTEs joined by date: reviews + low-rating counts, and `complaint_prediction` pivoted into `defects` / `damages` / `delays` per day. Feeds the dashboard trend chart directly.
 

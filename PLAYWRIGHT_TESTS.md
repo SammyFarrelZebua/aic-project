@@ -40,7 +40,7 @@ The suite drives the **real app** against a **seeded database**, so before runni
 
 The `webServer` config auto-starts `npm run dev` (reusing an already-running server locally). Screenshots are captured on failure; traces on first retry. The GitHub Actions workflow (`.github/workflows/playwright.yml`) runs the full suite on push/PR to `main`.
 
-**Concurrency caveat (2026-08-22):** `playwright.config.ts` has `fullyParallel: true` and no `workers` cap outside CI, and lists all 4 projects with no default-vs-explicit split (an earlier version of this doc claimed `npx playwright test` only ran chromium + mobile-chromium — that was never actually enforced by the config). Running all 4 fully in parallel means multiple real logins and, worse, multiple concurrent `dashboard.spec.ts` pipeline runs racing against the single in-process `pipelineState` singleton and the same DB tables that get cleared/repopulated mid-run — this reliably cascades into failures across unrelated specs (a still-busy dev server has been observed stalling even a plain `page.goto('/login')` well past 30s). **Run with `--workers=1` for a reliable result**: `npx playwright test --workers=1`. It's slower (all 140 tests serialized, ~30-40 min total including 16 real pipeline invocations) but avoids the cross-project races entirely. See "Verified run" below.
+**Concurrency caveat (2026-08-22):** `playwright.config.ts` has `fullyParallel: true` and no `workers` cap outside CI, and lists all 4 projects with no default-vs-explicit split (an earlier version of this doc claimed `npx playwright test` only ran chromium + mobile-chromium — that was never actually enforced by the config). Running all 4 fully in parallel means multiple real logins and, worse, multiple concurrent `dashboard.spec.ts` pipeline runs racing against the single in-process `pipelineState` singleton and the same DB tables that get cleared/repopulated mid-run — this reliably cascades into failures across unrelated specs (a still-busy dev server has been observed stalling even a plain `page.goto('/login')` well past 30s). **Run with `--workers=1` for a reliable result**: `npx playwright test --workers=1`. It's slower (all tests serialized, ~30-40 min total including 16 real pipeline invocations) but avoids the cross-project races entirely. See "Verified run" below.
 
 ## Test inventory
 
@@ -91,13 +91,7 @@ Smoke test replacing the Playwright template default.
 | `lists warehouses` | Warehouse list |
 | `lists couriers` | Courier list |
 
-All of the above (plus `products.spec.ts`, `reviews.spec.ts`, `settings.spec.ts`, `cases-alerts.spec.ts`, and `navigation.spec.ts`) navigate via sidebar clicks through the shared `tests/helpers/nav.ts` helpers (`clickNavLink`/`clickSidebarButton`) rather than clicking `page.getByRole('link'/'button', ...)` directly — see that file's note for why (mobile-viewport sidebar drawer).
-
-### `tests/products.spec.ts` — Product stats
-| Test | Verifies |
-|---|---|
-| `lists products with complaint metrics` | Products table + complaint metrics |
-| `searches for a product` | Search form navigates with query |
+All of the above (plus `reviews.spec.ts`, `settings.spec.ts`, `cases-alerts.spec.ts`, and `navigation.spec.ts`) navigate via sidebar clicks through the shared `tests/helpers/nav.ts` helpers (`clickNavLink`/`clickSidebarButton`) rather than clicking `page.getByRole('link'/'button', ...)` directly — see that file's note for why (mobile-viewport sidebar drawer).
 
 ### `tests/reviews.spec.ts` — Reviews & AI classification
 | Test | Verifies |
@@ -129,6 +123,8 @@ All of the above (plus `products.spec.ts`, `reviews.spec.ts`, `settings.spec.ts`
 - **Cancel Pipeline**: added alongside the "reset display on Run" behavior. Clicking Run immediately shows placeholder/empty KPIs and charts (derived display data, never mutating the underlying fetched data) rather than the previous run's stale numbers. Cancel uses a cooperative in-memory flag (`pipelineState.cancelRequested`) checked at the classification loop's existing every-25-review checkpoint -- there is no true task-cancellation primitive, so a cancel clicked during the one-time model load or the synchronous `detectAnomalies()` pass can take a few extra seconds to take effect. A cancelled run leaves `root_cause_predictions` empty and `complaint_prediction` possibly partially populated; this is intentional (the pipeline already deletes-then-repopulates both tables on every run, so partial state is transient) -- see the plan notes in the repo history for the full design rationale.
 
 ## Verified run (2026-08-22)
+
+**Stale test count as of the Produk-page removal (later 2026-08-22):** the run below covers 35 tests × 4 projects = 140, which included `tests/products.spec.ts` (2 tests). That file and the `/products` page it tested were removed afterward (see `CLAUDE.md`), so the current suite is 34 tests × 4 projects = 136 total. The pass/fail numbers and root-cause findings below are otherwise unaffected — nothing about the Produk removal changes how any other test behaves — so this section is left as an accurate historical record rather than rewritten.
 
 Ran the full 140-test suite (35 tests × 4 projects) against a live `npm run dev` instance with a seeded database (15,066 reviews, 5 factories/warehouses/couriers, 3 ground-truth incidents), `--workers=1`. Result, split across two fresh-server runs to sidestep dev-server memory growth (see below): **chromium + mobile-chromium: 67 passed, 0 failed, 3 skipped (9.0m)**; **firefox + webkit: 69 passed, 0 failed, 1 skipped (8.4m)**. Combined: **136 passed, 0 failed, 4 skipped, 0 real failures** across all 4 projects. Skips are all intentional (see below), not gaps. A single unbroken 4-project run also reached the same point cleanly on three separate attempts before being killed near the ~85-90% mark by what looks like an environment resource ceiling unrelated to test correctness (see the memory-growth note below) — the split-run result is the one to trust.
 

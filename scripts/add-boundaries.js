@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const dirs = ['cases', 'alerts', 'products', 'entities/couriers', 'entities/factories', 'entities/warehouses', 'dashboard'];
+const dirs = ['cases', 'alerts', 'entities/couriers', 'entities/factories', 'entities/warehouses', 'dashboard'];
 const loadingContent = `import { Loader2 } from "lucide-react";
 
 export default function Loading() {

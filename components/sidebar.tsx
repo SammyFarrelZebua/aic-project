@@ -11,7 +11,6 @@ import {
   Factory,
   Warehouse,
   Truck,
-  Package,
   Bell,
   Settings,
   Menu,
@@ -140,7 +139,6 @@ export function Sidebar() {
           )}
         </div>
 
-        <NavItem href="/products" icon={Package} label="Produk" collapsed={collapsed} mobileOpen={mobileOpen} onClick={closeMobile} />
         <NavItem href="/alerts" icon={Bell} label="Peringatan" collapsed={collapsed} mobileOpen={mobileOpen} onClick={closeMobile} />
         <NavItem href="/settings" icon={Settings} label="Pengaturan" collapsed={collapsed} mobileOpen={mobileOpen} onClick={closeMobile} />
       </div>
