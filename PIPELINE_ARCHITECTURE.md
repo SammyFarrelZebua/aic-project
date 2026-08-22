@@ -2,6 +2,8 @@
 
 Consolidated, line-cited findings from a 4-agent read-only exploration pass over the `backend` branch (2026-08-17): database schema, the pipeline run route, the anomaly-detection engine, and the dashboard. Line numbers reflect file state at exploration time.
 
+**Refreshed 2026-08-22** by a second 4-agent exploration pass covering the whole repo (not just the pipeline). Two corrections from that pass are folded in below: the sample-size gate values had drifted (this doc said ≥50/≥200; the code now reads ≥30/≥50 — see the anomaly-detection section), and the review fetch is now paginated (this doc's step 2 said "no pagination"; both the `review` fetch and the `analytics_traceability_view` fetch go through the same `selectAll<T>()` helper as of the 2026-08-17 pagination fix). A 7th migration (`20260818000000_add_review_date_index.sql`) has also landed since. Everything else below was re-verified and still holds.
+
 ## Core flow
 
 | # | Stage | Primary file |
@@ -17,7 +19,7 @@ Consolidated, line-cited findings from a 4-agent read-only exploration pass over
 
 ## Database schema
 
-6 migrations under `supabase/migrations/`, applied in order. No `seed.sql` or `config.toml` exists.
+7 migrations under `supabase/migrations/`, applied in order. No `seed.sql` or `config.toml` exists.
 
 ### 20260809000000_init_schema.sql — core entities
 
@@ -77,6 +79,8 @@ LEFT JOIN courier c  ON s.courier_id = c.courier_id;
 
 `20260816000001_add_fk_indexes.sql` adds 9 indexes covering every foreign key introduced in the base schema (`batch.factory_id`, `orders.product_id/batch_id/warehouse_id`, `shipment.order_id/courier_id`, `review.order_id`, `review_image.review_id`, `complaint_prediction.review_id`).
 
+`20260818000000_add_review_date_index.sql` adds `idx_review_review_date ON review(review_date DESC)`. Its own comment documents why: the Reviews page / `/api/reviews` orders by `review_date DESC` joined with `complaint_prediction`, and without this index Postgres full-sorts ~15k rows on every request, which could exceed the statement timeout, return a 500, and get silently swallowed by the frontend (no `res.ok` check) into the "Tidak ada ulasan yang ditemukan" empty state.
+
 ### Supabase client helpers
 
 `utils/supabase/` — four thin factories, one per execution context. All read `NEXT_PUBLIC_SUPABASE_URL`; the key and session handling differ.
@@ -94,7 +98,7 @@ Middleware bypasses auth checks entirely for paths starting with `/api/` or `/au
 
 ## Pipeline run route
 
-`app/api/pipeline/run/route.ts` — 239 lines. A fire-and-forget background job pattern: `POST` starts the work and returns immediately; progress is polled separately.
+`app/api/pipeline/run/route.ts` — 320 lines. A fire-and-forget background job pattern: `POST` starts the work and returns immediately; progress is polled separately.
 
 ### POST handler
 
@@ -108,7 +112,7 @@ Middleware bypasses auth checks entirely for paths starting with `/api/` or `/au
 | # | Step | Detail |
 |---|---|---|
 | 1 | Clear old results | Deletes all rows from `root_cause_predictions`, then all rows from `complaint_prediction` (via `neq` against the nil UUID — PostgREST rejects a filterless delete) |
-| 2 | Fetch reviews | Full `review` table scan, no pagination |
+| 2 | Fetch reviews | Full `review` table, paged through `selectAll<T>()` in 1000-row chunks (PostgREST's default `max_rows` would otherwise silently truncate a bare `.select('*')` — fixed 2026-08-17) |
 | 3 | Size the ML workload | `totalMlTasks` = reviews where `rating ≤ 3` and `review_text` is non-empty |
 | 4 | Classify each review | See NLP classification below — serial loop, no parallelism |
 | 5 | Insert predictions | Chunked at 500 rows/insert into `complaint_prediction`; a chunk failure aborts the whole run |
@@ -161,7 +165,7 @@ lateDelivery    /telat|lama|lambat|kurir|pengiriman|tunggu|meleset/i
 - Sweep starts **37 days** after the first record and steps forward one day at a time.
 - **Current window**: 7 days immediately before "today" (half-open).
 - **Historic window**: the 30 days before that (offset 37 days back from "today" — i.e. 37 − 7 = 30-day span).
-- A day is skipped entirely unless the current window has **≥ 50** reviews and the historic window has **≥ 200** reviews (minimum sample-size gate — not documented in CLAUDE.md).
+- A day is skipped entirely unless the current window has **≥ 30** reviews and the historic window has **≥ 50** reviews (minimum sample-size gate, `utils/anomaly-detection.ts` — the code comment there says these were "lowered ... to detect anomalies in sparse, real-world review data"; CLAUDE.md documents this correctly). These values were re-verified 2026-08-22 against current source — an earlier version of this doc stated ≥50/≥200, which is stale.
 
 ### Spike detection, per incident type
 
@@ -263,13 +267,22 @@ Note this does not cross-check `candidate_type` against any entity-type field on
 
 ## Discrepancies vs. CLAUDE.md
 
-Everything below was confirmed by directly reading current source, not inferred.
+As of the 2026-08-22 refresh, CLAUDE.md has been updated to fix items 4 (7th migration + `product_stats_view`/`daily_complaints_view`/`profiles` are now all documented) and 5 (sample-size gate values corrected and now stated). Items 1–3 below were true as of 2026-08-17 and remain true — CLAUDE.md's pipeline/dashboard section still describes the score as `deviationRatio × incidentComplaintShare` without the isolation-forest term, and still doesn't call out `app/page.tsx`'s redirect or the `(dashboard)` route-group path explicitly (though the page inventory it gives is otherwise accurate — see the 2026-08-22 UI exploration notes below). Left here for historical reference:
 
 1. **Root-cause scoring is undocumented as a hybrid model.** CLAUDE.md states candidates are scored by `deviationRatio × incidentComplaintShare`. The real formula is `0.6 × isolationForestScore + 0.4 × (deviationRatio × incidentComplaintShare)` — an Isolation Forest model (`isolation-forest` npm package, `utils/isolation-forest-detector.ts`) does 60% of the weighting and isn't mentioned in the doc at all.
-2. **`app/page.tsx` is not the schema explorer.** It's now a 6-line `redirect('/dashboard')`. The schema explorer described in CLAUDE.md lives at `app/dev/explorer/page.tsx`.
+2. **`app/page.tsx` is not the schema explorer.** It's now a 6-line `redirect('/dashboard')`. The schema explorer described in CLAUDE.md lives at `app/dev/explorer/page.tsx`. (Also worth noting: the same `/` → `/dashboard` redirect is configured a second time in `next.config.ts`'s `redirects()`.)
 3. **Dashboard path has moved under a route group.** `app/dashboard/page.tsx` does not exist literally — the real path is `app/(dashboard)/dashboard/page.tsx`.
-4. **Two views and one table are unmentioned.** `product_stats_view`, `daily_complaints_view`, and the auth-linked `profiles` table (with RLS + auto-provisioning trigger) exist in migrations but aren't described in the architecture doc.
-5. **Sample-size gate is undocumented.** The anomaly sweep silently skips any day where the current window has fewer than 50 reviews or the historic window fewer than 200 — not mentioned alongside the spike-ratio threshold.
+4. ~~Two views and one table are unmentioned.~~ **Fixed 2026-08-22** — CLAUDE.md's DB section now lists all 7 migrations including `product_stats_view`, `daily_complaints_view`, and `profiles`.
+5. ~~Sample-size gate is undocumented.~~ **Fixed 2026-08-22** — CLAUDE.md now states the ≥30 current / ≥50 historic gate explicitly (see the corrected values above; this doc's own value had also drifted and has been corrected in the same pass).
+
+## UI/UX findings from the 2026-08-22 exploration (outside this doc's original pipeline scope)
+
+Captured here since they surfaced during the same pass; the product page inventory itself (all `(dashboard)` pages, auth pages, `dev/explorer`) matches CLAUDE.md exactly with no missing or extra pages.
+
+- `app/(dashboard)/reviews` and `app/(dashboard)/settings` have no `loading.tsx`/`error.tsx`, unlike every other dashboard section (`dashboard`, `alerts`, `cases`, `entities/{factories,warehouses,couriers}`, `products`), which all share byte-identical copies of both.
+- The three entity detail pages (`entities/{factories,warehouses,couriers}/[id]/page.tsx`) render a plain "not found" div instead of calling `notFound()`, and each has a non-functional "Lihat semua N batch/pesanan/pengiriman" span with no `href`/`onClick`.
+- Client-side/URL-driven filtering exists only on `products` (server-side via query params) and `reviews` (client-side, 300ms-debounced fetch); `cases`, `alerts`, and the `entities/*` list pages have no search/filter UI.
+- `lib/dossier-summary.ts` (the login page's live pipeline dossier) explicitly documents that its "activity" check is not a literal today-filter — the demo dataset is 2016–2018, so a calendar-day filter would always read empty; it goes false only on a genuinely fresh DB.
 
 ## Adjacent files touched but not deep-dived
 

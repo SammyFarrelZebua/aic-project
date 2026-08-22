@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginWithForm } from './helpers/auth';
+import { clickNavLink } from './helpers/nav';
 
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('Settings', () => {
   });
 
   test('shows the user profile and system info', async ({ page }) => {
-    await page.getByRole('link', { name: 'Pengaturan' }).click();
+    await clickNavLink(page, 'Pengaturan');
     await page.waitForURL(/\/settings/);
     await expect(page.getByRole('heading', { name: 'Pengaturan' })).toBeVisible();
     // Profile card.

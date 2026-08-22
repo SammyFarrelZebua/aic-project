@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginWithForm } from './helpers/auth';
+import { clickNavLink } from './helpers/nav';
 
 test.describe('Reviews', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('Reviews', () => {
   });
 
   test('lists reviews with AI classification columns', async ({ page }) => {
-    await page.getByRole('link', { name: 'Ulasan' }).click();
+    await clickNavLink(page, 'Ulasan');
     await page.waitForURL(/\/reviews/);
     await expect(page.getByRole('heading', { name: 'Ulasan' })).toBeVisible();
     // Table headers incl. probability columns.
@@ -20,7 +21,7 @@ test.describe('Reviews', () => {
   });
 
   test('filters reviews by complaint type', async ({ page }) => {
-    await page.getByRole('link', { name: 'Ulasan' }).click();
+    await clickNavLink(page, 'Ulasan');
     await page.waitForURL(/\/reviews/);
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 20_000 });
 
@@ -31,7 +32,7 @@ test.describe('Reviews', () => {
   });
 
   test('filters reviews by rating', async ({ page }) => {
-    await page.getByRole('link', { name: 'Ulasan' }).click();
+    await clickNavLink(page, 'Ulasan');
     await page.waitForURL(/\/reviews/);
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 20_000 });
 
@@ -41,7 +42,7 @@ test.describe('Reviews', () => {
   });
 
   test('searches review text', async ({ page }) => {
-    await page.getByRole('link', { name: 'Ulasan' }).click();
+    await clickNavLink(page, 'Ulasan');
     await page.waitForURL(/\/reviews/);
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 20_000 });
 

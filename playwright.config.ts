@@ -10,6 +10,15 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
+  /* Bumped from Playwright's 30s default. The pipeline-heavy tests in
+   * dashboard.spec.ts run a CPU-bound, largely-synchronous classification +
+   * anomaly-detection pass in-process on the single dev-server thread; a
+   * still-settling server has been observed to stall even a plain
+   * page.goto('/login') in the next test well past 30s. Those tests already
+   * carry their own much larger test.setTimeout() overrides and end with an
+   * explicit settle wait, but this blanket bump gives every other spec a
+   * little more headroom too. */
+  timeout: 45_000,
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginWithForm } from './helpers/auth';
+import { clickNavLink } from './helpers/nav';
 
 test.describe('Cases', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('Cases', () => {
   });
 
   test('lists anomaly cases in the cases table', async ({ page }) => {
-    await page.getByRole('link', { name: 'Kasus' }).click();
+    await clickNavLink(page, 'Kasus');
     await page.waitForURL(/\/cases/);
     await expect(page.getByRole('heading', { name: 'Kasus Anomali' })).toBeVisible();
     // Table header present.
@@ -17,7 +18,7 @@ test.describe('Cases', () => {
   });
 
   test('navigates to a case detail page from the list', async ({ page }) => {
-    await page.getByRole('link', { name: 'Kasus' }).click();
+    await clickNavLink(page, 'Kasus');
     await page.waitForURL(/\/cases/);
 
     // Wait for the table to finish loading (spinner disappears).
@@ -48,7 +49,7 @@ test.describe('Cases', () => {
         body: JSON.stringify({ success: true, data: [], count: 0 }),
       });
     });
-    await page.getByRole('link', { name: 'Kasus' }).click();
+    await clickNavLink(page, 'Kasus');
     await page.waitForURL(/\/cases/);
     await expect(page.getByText('Tidak ada kasus yang ditemukan')).toBeVisible({ timeout: 20_000 });
   });
@@ -60,7 +61,7 @@ test.describe('Alerts', () => {
   });
 
   test('lists alerts from root_cause_predictions', async ({ page }) => {
-    await page.getByRole('link', { name: 'Peringatan' }).click();
+    await clickNavLink(page, 'Peringatan');
     await page.waitForURL(/\/alerts/);
     await expect(page.getByRole('heading', { name: 'Peringatan' })).toBeVisible();
   });
@@ -71,7 +72,7 @@ test.describe('Alerts', () => {
       // assert the page renders and either shows alerts or the empty message.
       await route.continue();
     });
-    await page.getByRole('link', { name: 'Peringatan' }).click();
+    await clickNavLink(page, 'Peringatan');
     await page.waitForURL(/\/alerts/);
     // Either alerts render, or the empty state.
     const emptyState = page.getByText('Tidak ada peringatan terbaru.');

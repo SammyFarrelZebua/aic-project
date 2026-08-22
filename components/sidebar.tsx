@@ -99,6 +99,7 @@ export function Sidebar() {
         {/* Close Button for mobile */}
         <button
           onClick={() => setMobileOpen(false)}
+          aria-label="Tutup menu"
           className="md:hidden flex items-center justify-center p-1.5 rounded-md text-ink-muted hover:bg-paper hover:text-ink"
         >
           <X className="h-5 w-5" />
@@ -186,6 +187,7 @@ export function Sidebar() {
       <div className="md:hidden flex items-center p-4 bg-paper-raised border-b border-line text-ink fixed top-0 left-0 right-0 z-40">
         <button
           onClick={() => setMobileOpen(true)}
+          aria-label="Buka menu"
           className="p-2 -ml-2 rounded-md text-ink-muted hover:bg-paper"
         >
           <Menu className="h-5 w-5" />
