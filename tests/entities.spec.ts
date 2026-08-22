@@ -1,16 +1,17 @@
 import { test, expect } from '@playwright/test';
 import { loginWithForm } from './helpers/auth';
+import { clickNavLink, clickSidebarButton } from './helpers/nav';
 
 test.describe('Entities', () => {
   test.beforeEach(async ({ page }) => {
     await loginWithForm(page);
     // The "Entitas" group is a disclosure collapsed by default outside
     // /entities/* routes -- expand it before any sub-link click.
-    await page.getByRole('button', { name: 'Entitas' }).click();
+    await clickSidebarButton(page, 'Entitas');
   });
 
   test('lists factories with anomaly status', async ({ page }) => {
-    await page.getByRole('link', { name: 'Pabrik' }).click();
+    await clickNavLink(page, 'Pabrik');
     await page.waitForURL(/\/entities\/factories/);
     await expect(page.getByRole('heading', { name: 'Pabrik' })).toBeVisible();
     // Cards render at least one factory from the seed data.
@@ -18,7 +19,7 @@ test.describe('Entities', () => {
   });
 
   test('opens a factory detail page with batch data', async ({ page }) => {
-    await page.getByRole('link', { name: 'Pabrik' }).click();
+    await clickNavLink(page, 'Pabrik');
     await page.waitForURL(/\/entities\/factories/);
     const firstCard = page.locator('a[href^="/entities/factories/"]').first();
     await expect(firstCard).toBeVisible({ timeout: 20_000 });
@@ -33,14 +34,14 @@ test.describe('Entities', () => {
   });
 
   test('lists warehouses', async ({ page }) => {
-    await page.getByRole('link', { name: 'Gudang' }).click();
+    await clickNavLink(page, 'Gudang');
     await page.waitForURL(/\/entities\/warehouses/);
     await expect(page.getByRole('heading', { name: 'Gudang' })).toBeVisible();
     await expect(page.locator('a[href^="/entities/warehouses/"]').first()).toBeVisible({ timeout: 20_000 });
   });
 
   test('lists couriers', async ({ page }) => {
-    await page.getByRole('link', { name: 'Kurir' }).click();
+    await clickNavLink(page, 'Kurir');
     await page.waitForURL(/\/entities\/couriers/);
     await expect(page.getByRole('heading', { name: 'Kurir' })).toBeVisible();
     await expect(page.locator('a[href^="/entities/couriers/"]').first()).toBeVisible({ timeout: 20_000 });

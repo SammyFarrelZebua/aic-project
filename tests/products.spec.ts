@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginWithForm } from './helpers/auth';
+import { clickNavLink } from './helpers/nav';
 
 test.describe('Products', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('Products', () => {
   });
 
   test('lists products with complaint metrics', async ({ page }) => {
-    await page.getByRole('link', { name: 'Produk' }).click();
+    await clickNavLink(page, 'Produk');
     await page.waitForURL(/\/products/);
     await expect(page.getByRole('heading', { name: 'Produk' })).toBeVisible();
     // Table headers.
@@ -19,7 +20,7 @@ test.describe('Products', () => {
   });
 
   test('searches for a product', async ({ page }) => {
-    await page.getByRole('link', { name: 'Produk' }).click();
+    await clickNavLink(page, 'Produk');
     await page.waitForURL(/\/products/);
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 20_000 });
 

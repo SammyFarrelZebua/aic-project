@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginWithForm } from './helpers/auth';
+import { clickNavLink, clickSidebarButton } from './helpers/nav';
 
 test.describe('Sidebar navigation', () => {
   test.beforeEach(async ({ page }) => {
@@ -16,21 +17,21 @@ test.describe('Sidebar navigation', () => {
       { label: 'Pengaturan', path: /\/settings/ },
     ];
     for (const { label, path } of links) {
-      await page.getByRole('link', { name: label }).click();
+      await clickNavLink(page, label);
       await page.waitForURL(path);
     }
   });
 
   test('expands the Entitas group and visits each entity list', async ({ page }) => {
     // Expand the Entitas group if not already open.
-    await page.getByRole('button', { name: 'Entitas' }).click();
+    await clickSidebarButton(page, 'Entitas');
     const subLinks = [
       { label: 'Pabrik', path: /\/entities\/factories/ },
       { label: 'Gudang', path: /\/entities\/warehouses/ },
       { label: 'Kurir', path: /\/entities\/couriers/ },
     ];
     for (const { label, path } of subLinks) {
-      await page.getByRole('link', { name: label }).click();
+      await clickNavLink(page, label);
       await page.waitForURL(path);
     }
   });
