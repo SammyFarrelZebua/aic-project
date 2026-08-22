@@ -62,14 +62,22 @@ function normalizeIndonesianText(text: string): string {
 }
 
 export async function POST() {
-  const cookieStore = await cookies();
-  const authClient = createClient(cookieStore);
-  const { data: { user }, error: authError } = await authClient.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  }
-
+  // Claim the concurrency slot synchronously, before any `await` yields
+  // control back to the event loop. This must happen first: the auth check
+  // below is a real network round-trip, and Node only guarantees run-to-
+  // completion for the synchronous code between awaits -- if the "already
+  // running?" check ran after that await (as it used to), two near-
+  // simultaneous POSTs (e.g. a double-click) could both resolve their own
+  // auth call and both see pipelineState.status as not-'running' before
+  // either had a chance to flip it, letting both start
+  // runPipelineBackground() concurrently. Both then delete-then-insert
+  // complaint_prediction with the same deterministic prediction_id values,
+  // and whichever insert commits second collides with the first's
+  // already-committed rows ("duplicate key value violates unique
+  // constraint complaint_prediction_pkey"). Claiming the slot before the
+  // first await closes that window: whichever request's synchronous prefix
+  // runs first claims it uninterrupted, so the second request's own
+  // synchronous prefix (whenever it runs) always sees 'running' already set.
   if (pipelineState.status === 'running') {
     return NextResponse.json({ success: true, message: 'Pipeline already running in background' });
   }
@@ -79,6 +87,16 @@ export async function POST() {
   pipelineState.duration_ms = 0;
   pipelineState.error = null;
   pipelineState.cancelRequested = false;
+
+  const cookieStore = await cookies();
+  const authClient = createClient(cookieStore);
+  const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+  if (authError || !user) {
+    // Not actually starting a run -- release the slot we claimed above.
+    pipelineState.status = 'idle';
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
 
   runPipelineBackground().catch((e) => {
     // A deliberate cancel already settles pipelineState itself (see the
@@ -97,8 +115,10 @@ async function runPipelineBackground() {
   const supabase = createServiceClient();
 
   try {
-    await supabase.from('root_cause_predictions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('complaint_prediction').delete().neq('prediction_id', '00000000-0000-0000-0000-000000000000');
+    const { error: delRcpError } = await supabase.from('root_cause_predictions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (delRcpError) throw new Error(`Gagal menghapus root_cause_predictions lama: ${delRcpError.message}`);
+    const { error: delCpError } = await supabase.from('complaint_prediction').delete().neq('prediction_id', '00000000-0000-0000-0000-000000000000');
+    if (delCpError) throw new Error(`Gagal menghapus complaint_prediction lama: ${delCpError.message}`);
 
     const reviews = await selectAll<any>(supabase, 'review');
     console.log(`[Pipeline] Fetched ${reviews.length} reviews total`);
@@ -221,10 +241,31 @@ async function runPipelineBackground() {
       newComplaintPredictions.push(pred);
     }
 
-    // Insert predictions in chunks of 500 to Supabase and log error if any
+    // Insert predictions in chunks of 500 to Supabase and log error if any.
+    // Uses upsert (not insert) keyed on prediction_id -- prediction_id is
+    // deterministic (`pred-${review_id}`, see below), so this loop is
+    // idempotent by design. That matters because this loop has no
+    // cancellation checkpoint (see the checkpoint added below): if a run is
+    // cancelled mid-classification but the cooperative check at the
+    // classification loop's last checkpoint already passed, it keeps
+    // writing every chunk here uninterrupted before the cancel is ever
+    // honored (line ~275 below). If a fresh run is then started right
+    // after (a real, observed sequence: cancel -> immediate re-run click),
+    // its own delete-then-insert can overlap with the still-finishing
+    // cancelled run's writes and previously crashed with "duplicate key
+    // value violates unique constraint complaint_prediction_pkey" on a
+    // plain .insert(). upsert makes that overlap harmless instead of fatal
+    // -- whichever write lands last for a given review just wins, and since
+    // both runs' classifications are for the same review, that's fine.
     for (let i = 0; i < newComplaintPredictions.length; i += 500) {
+      if (pipelineState.cancelRequested) {
+        pipelineState.status = 'cancelled';
+        pipelineState.duration_ms = Date.now() - start;
+        pipelineState.error = null;
+        throw new PipelineCancelledError();
+      }
       const chunk = newComplaintPredictions.slice(i, i + 500);
-      const { error } = await supabase.from('complaint_prediction').insert(chunk);
+      const { error } = await supabase.from('complaint_prediction').upsert(chunk, { onConflict: 'prediction_id' });
       if (error) {
         console.error(`[DB Insert Error] Failed at chunk starting at index ${i}:`, error.message, error.details, error.hint);
         throw new Error(`Gagal menyimpan chunk prediksi ${i} ke database: ${error.message}`);

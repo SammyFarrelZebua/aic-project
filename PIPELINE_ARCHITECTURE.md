@@ -102,9 +102,9 @@ Middleware bypasses auth checks entirely for paths starting with `/api/` or `/au
 
 ### POST handler
 
-1. Builds a cookie-scoped auth client, calls `auth.getUser()` — unauthenticated requests get `401` (the only auth check in the file).
-2. If `pipelineState.status === 'running'`, short-circuits and returns success without starting a second run — an in-memory concurrency guard, scoped to a single server process only.
-3. Resets shared `pipelineState`, then calls `runPipelineBackground()` without awaiting it.
+1. If `pipelineState.status === 'running'`, short-circuits and returns success without starting a second run — an in-memory concurrency guard, scoped to a single server process only. **This check now runs first, before any `await`** (fixed 2026-08-22) — it used to run after the auth check below, which let two near-simultaneous requests (e.g. a double-click) both pass the guard before either flipped `pipelineState.status`, since `auth.getUser()` is a real network round-trip and Node only guarantees run-to-completion for the synchronous code *between* awaits. Both concurrent runs would then delete-then-insert `complaint_prediction` with the same deterministic `prediction_id` values, and whichever insert committed second hit a real Postgres error: `duplicate key value violates unique constraint "complaint_prediction_pkey"`.
+2. Resets shared `pipelineState` to `running`, *then* builds a cookie-scoped auth client and calls `auth.getUser()` — unauthenticated requests get `401` and the claimed slot is released back to `idle` (the only auth check in the file).
+3. Calls `runPipelineBackground()` without awaiting it.
 4. Returns `{ success: true, message: 'Pipeline started' }` immediately. Progress is polled via `GET /api/pipeline/status`, which just returns the live `pipelineState` object.
 
 ### Background job — 10 steps
@@ -115,7 +115,7 @@ Middleware bypasses auth checks entirely for paths starting with `/api/` or `/au
 | 2 | Fetch reviews | Full `review` table, paged through `selectAll<T>()` in 1000-row chunks (PostgREST's default `max_rows` would otherwise silently truncate a bare `.select('*')` — fixed 2026-08-17) |
 | 3 | Size the ML workload | `totalMlTasks` = reviews where `rating ≤ 3` and `review_text` is non-empty |
 | 4 | Classify each review | See NLP classification below — serial loop, no parallelism |
-| 5 | Insert predictions | Chunked at 500 rows/insert into `complaint_prediction`; a chunk failure aborts the whole run |
+| 5 | Insert predictions | Chunked at 500 rows/upsert (`onConflict: 'prediction_id'`, changed from a plain insert 2026-08-22 — see below) into `complaint_prediction`, with a cancellation checkpoint between chunks; a chunk failure aborts the whole run |
 | 6 | Join onto traceability view | Fetches `analytics_traceability_view`, attaches `predicted_type` (NORMAL → `null`) and `purchaseTime` from the in-memory predictions, sorts ascending by `purchaseTime` |
 | 7 | Load candidate pools | All `factory_id`, `warehouse_id`, `courier_id` values, sequentially (not `Promise.all`) |
 | 8 | Detect anomalies | `detectAnomalies(records, candidateMap)` — see anomaly detection below |
@@ -123,6 +123,8 @@ Middleware bypasses auth checks entirely for paths starting with `/api/` or `/au
 | 10 | Finalize | Sets `pipelineState.status = 'done'`, revalidates the `dashboard-analytics` cache tag (failure here is caught separately and doesn't fail the run) |
 
 **State & error handling**: Progress lives entirely in a plain in-memory object (`app/api/pipeline/state.ts`: `{status, processed, duration_ms, error}`) shared between the run route and the status route — it does not survive server restarts and would not work across multiple serverless instances. Per-review classification errors degrade gracefully to `NORMAL`; DB chunk-insert errors abort the run and are logged with full Supabase error detail (`message`/`details`/`hint`).
+
+**Why step 5 upserts instead of inserting (fixed 2026-08-22):** `prediction_id` is deterministic (`pred-${review_id}`), so two overlapping executions of this loop will, for any review they both process, try to write the exact same row. This used to `.insert()`, which hard-fails on that collision (`duplicate key value violates unique constraint "complaint_prediction_pkey"`). Two ways this loop can end up overlapping despite the POST-time concurrency guard: (1) the guard only blocks a *new* run while `pipelineState.status === 'running'`, but this loop itself had no cancellation checkpoint, so a cancelled run kept writing every remaining chunk uninterrupted before ever honoring the cancel — during that window `status` stays `'running'` and the guard still (correctly) blocks a new run, but the *moment* it finally notices the cancel and flips to `'cancelled'`, a fresh click can start a second run whose own writes can race the first run's just-barely-still-in-flight ones; (2) more generally, any window between one run settling to a non-`'running'` state and its data being fully durable is a race window for a fast-fingered re-click. Making the upsert idempotent (`onConflict: 'prediction_id'`) removes the failure mode entirely rather than trying to close every timing window — whichever write for a given review lands last simply wins, which is semantically fine since both writes are classifying the same review. A cancellation checkpoint was also added inside the loop itself, so a cancelled run stops promptly instead of finishing all remaining chunks first.
 
 ### NLP classification (step 4, in detail)
 
@@ -178,6 +180,8 @@ trigger when: spikeRatio >= 2.0  AND  currentComplaints >= 3
 ```
 
 Candidate pool per type: `PRODUCT_DEFECT → factories`, `PACKAGING_DAMAGE → warehouses`, `LATE_DELIVERY → couriers`.
+
+**This restriction was a bug fix landed 2026-08-22, not always true.** `utils/anomaly-detection.ts` used to build one combined pool of all 15 factory+warehouse+courier candidates and score it against *every* incident type, regardless of which entity type is structurally responsible for that complaint category. Besides being semantically wrong (a factory can't cause a late delivery), it meant the isolation forest compared entities with fundamentally different feature scales (review volume, complaint rate) as if they were one population, diluting the real signal. Verified against the 3 injected ground-truth incidents via `npm run test-baseline` on the local dataset (`data/analytics_traceability_dataset.json`): `PRODUCT_DEFECT` and `PACKAGING_DAMAGE` still won correctly under the old unrestricted pool (their signal was strong enough to beat the noise), but `LATE_DELIVERY` never once ranked the true courier source (`cour-fast`) as top-1. Restricting the pool to the semantically-correct entity type per incident took **Top-1 identification accuracy from 22.08% (17/77) to 64.94% (50/77)** on the same dataset, same ground truth, same everything else — a clean, controlled before/after comparison, not a live-DB artifact.
 
 > **Not a simple ratio score.** CLAUDE.md describes candidate scoring as `deviationRatio × incidentComplaintShare`. The actual formula blends that with an **Isolation Forest** anomaly score (via the `isolation-forest` npm package, 100 trees by default) that is not mentioned anywhere in CLAUDE.md — see discrepancies below.
 

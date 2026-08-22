@@ -71,11 +71,28 @@ export function detectAnomalies(
       const spikeRatio = r_c / (r_h + 0.001);
 
       if (spikeRatio >= 2.0 && cComplaints >= 3) {
-        const allCandidates: { id: string; entityType: 'factory' | 'warehouse' | 'courier' }[] = [
-          ...candidates.factoryIds.map(id => ({ id, entityType: 'factory' as const })),
-          ...candidates.warehouseIds.map(id => ({ id, entityType: 'warehouse' as const })),
-          ...candidates.courierIds.map(id => ({ id, entityType: 'courier' as const }))
-        ];
+        // Score only the entity type that's structurally responsible for this
+        // incident category (factories produce PRODUCT_DEFECT, warehouses
+        // pack -> PACKAGING_DAMAGE, couriers deliver -> LATE_DELIVERY).
+        // Previously this scored all 15 factory+warehouse+courier candidates
+        // together for every incident type -- besides being semantically
+        // wrong (a factory can't cause a late delivery), it also meant the
+        // isolation forest compared entities with fundamentally different
+        // feature scales (review volume, complaint rate) against each other
+        // as if they were one population, diluting the real signal. Verified
+        // against the 3 injected ground-truth incidents: PRODUCT_DEFECT and
+        // PACKAGING_DAMAGE still won correctly under the old unrestricted
+        // pool (their signal was strong enough to beat the noise), but
+        // LATE_DELIVERY never once ranked the true courier source as top-1 --
+        // restricting the pool fixes that.
+        const entityType: 'factory' | 'warehouse' | 'courier' =
+          type === 'PRODUCT_DEFECT' ? 'factory' : type === 'PACKAGING_DAMAGE' ? 'warehouse' : 'courier';
+        const idsForType =
+          entityType === 'factory' ? candidates.factoryIds :
+          entityType === 'warehouse' ? candidates.warehouseIds :
+          candidates.courierIds;
+        const allCandidates: { id: string; entityType: 'factory' | 'warehouse' | 'courier' }[] =
+          idsForType.map(id => ({ id, entityType }));
 
         const trainingData = allCandidates.map(c =>
           buildEntityFeatures(records, type, c.entityType, c.id, currentWindowStart, currentDate, true)
