@@ -8,7 +8,7 @@ import { TraceStrip, type TraceCounts, type TraceStatus } from "@/components/tra
 import { ComplaintTrendChart } from "@/components/complaint-trend-chart"
 import { CandidateRanking } from "@/components/candidate-ranking"
 import { averageAnomalyActiveDays } from "@/lib/metrics"
-import { friendlyPipelineError } from "@/lib/pipeline-messages"
+import { describeConnectionFailure, friendlyPipelineError } from "@/lib/pipeline-messages"
 import type { DashboardData, DashboardResponse } from "@/types/dashboard"
 import { cn } from "@/utils/cn"
 
@@ -23,6 +23,54 @@ const EMPTY_DASHBOARD: DashboardData = {
   timeseries: [],
   rankings: { factories: [], warehouses: [], couriers: [] },
   anomalies: [],
+}
+
+// The pipeline endpoint lives behind a single-threaded `next dev` server that
+// spends most of a run's wall-clock time blocked inside a CPU-bound, largely
+// synchronous classification + anomaly-detection pass. While that thread is
+// busy, the browser's connection to /api/pipeline/run can be reset or time out
+// client-side before the server even picks up the request -- the request may
+// never have been processed at all. `runPipelineBackground()` claims a
+// concurrency slot, so the POST is a fire-and-forget "please start"; a failed
+// transport is safe to retry because a request the server actually started is
+// rejected by the slot check (pipelineState.status === 'running' -> 200
+// "already running"). Distinguish a genuine user-visible timeout (reported to
+// the trace strip) from a transient transport failure (retried silently).
+async function postWithRetry(
+  url: string,
+  attempts = 3
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  let lastReason: unknown = null
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(url, { method: "POST" })
+      let body: unknown = null
+      try {
+        body = await res.json()
+      } catch {
+        /* non-JSON body — leave body null */
+      }
+      // Don't retry on HTTP-level rejection: a 4xx/5xx means the server was
+      // reachable and answered, and re-submitting an already-received
+      // response risks a duplicate run (e.g. after a 401 that would otherwise
+      // be surfaced to the user).
+      return { ok: res.ok, status: res.status, body }
+    } catch (reason) {
+      lastReason = reason
+      const failure = describeConnectionFailure(reason)
+      // A genuine timeout means the server was reachable but slow (or the
+      // request took too long) — retrying is unlikely to help, so surface it.
+      if (failure === "timeout") return { ok: false, status: 0, body: reason }
+      // 'other' — not a transport error; don't retry.
+      if (failure === "other") return { ok: false, status: 0, body: reason }
+      // 'network' — the likely dev-server-stall case: the connection was
+      // reset/timed out client-side before the server responded. Retry.
+      if (attempt < attempts) {
+        await new Promise((r) => setTimeout(r, 500 * attempt))
+      }
+    }
+  }
+  return { ok: false, status: 0, body: lastReason }
 }
 
 export default function DashboardPage() {
@@ -108,16 +156,24 @@ export default function DashboardPage() {
   const handleRunPipeline = async () => {
     setPipelineStatus("running")
     setPipelineError(null)
-    try {
-      const res = await fetch("/api/pipeline/run", { method: "POST" })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error || "Pipeline gagal dijalankan.")
-      // the useEffect will now take over polling
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : "Pipeline gagal dijalankan."
+    const result = await postWithRetry("/api/pipeline/run")
+    if (result.status >= 200 && result.status < 300) {
+      // Started (or already running) — the polling effect takes over from here.
+      return
+    }
+    if (result.status !== 0) {
+      // The server responded with an HTTP error (e.g. 401/500). Do not fall
+      // back to the network message; report the server's own error text.
+      const json = result.body as { success?: boolean; error?: string } | null
+      const raw = json?.error || (result.status === 401 ? "Unauthorized" : "Pipeline gagal dijalankan.")
       setPipelineError(friendlyPipelineError(raw))
       setPipelineStatus("error")
+      return
     }
+    // status 0 — the fetch failed at the transport layer (retries exhausted).
+    const raw = result.body instanceof Error ? result.body.message : "Pipeline gagal dijalankan."
+    setPipelineError(friendlyPipelineError(raw))
+    setPipelineStatus("error")
   }
 
   const handleCancelPipeline = async () => {
