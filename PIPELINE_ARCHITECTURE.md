@@ -98,7 +98,7 @@ Middleware bypasses auth checks entirely for paths starting with `/api/` or `/au
 
 ## Pipeline run route
 
-`app/api/pipeline/run/route.ts` — 320 lines. A fire-and-forget background job pattern: `POST` starts the work and returns immediately; progress is polled separately.
+`app/api/pipeline/run/route.ts` — 361 lines. A fire-and-forget background job pattern: `POST` starts the work and returns immediately; progress is polled separately.
 
 ### POST handler
 
@@ -160,7 +160,7 @@ lateDelivery    /telat|lama|lambat|kurir|pengiriman|tunggu|meleset/i
 
 ## Anomaly detection engine
 
-`utils/anomaly-detection.ts` (114 lines) + `utils/isolation-forest-detector.ts` (105 lines). One exported function, `detectAnomalies(records, candidates)`, sweeping day-by-day over pre-sorted records.
+`utils/anomaly-detection.ts` (143 lines) + `utils/isolation-forest-detector.ts` (108 lines). One exported function, `detectAnomalies(records, candidates)`, sweeping day-by-day over pre-sorted records.
 
 ### Sliding window mechanics
 
@@ -222,7 +222,7 @@ Only the top-ranked candidate per detected anomaly is written. The insert is a s
 
 ## Dashboard analytics API
 
-`app/api/analytics/dashboard/route.ts` — 148 lines, `force-dynamic`. Auth is checked with the user-scoped client; the actual data fetch uses the service-role client (RLS bypassed) wrapped in a 5-minute cache.
+`app/api/analytics/dashboard/route.ts` — 157 lines, `force-dynamic`. Auth is checked with the user-scoped client; the actual data fetch uses the service-role client (RLS bypassed) wrapped in a 5-minute cache.
 
 - `unstable_cache`, key `['dashboard-analytics']`, `revalidate: 300`, tag `dashboard-analytics` (the same tag the pipeline route revalidates on completion). `?fresh=true` bypasses the cache.
 - Unauthenticated requests get `401` before any data is touched.
@@ -254,9 +254,11 @@ Note this does not cross-check `candidate_type` against any entity-type field on
 
 ## Dashboard UI
 
-`app/(dashboard)/dashboard/page.tsx` — 225 lines, client component.
+`app/(dashboard)/dashboard/page.tsx` — 365 lines, client component.
 
-**Data flow** — fetches `/api/analytics/dashboard` once on mount (hits the 5-minute server cache). The "Run Pipeline" button posts to `/api/pipeline/run`, then a separate effect polls `GET /api/pipeline/status` every 2 seconds while `status === 'running'`; on `done` it awaits a fresh `fetchDashboard()` call — this poll-then-refetch is the only place the UI re-pulls KPIs after a run.
+**Data flow** — fetches `/api/analytics/dashboard` once on mount (hits the 5-minute server cache). The "Run Pipeline" button posts to `/api/pipeline/run` via a `postWithRetry` helper (added 2026-08-25 — see below), then a separate effect polls `GET /api/pipeline/status` every 2 seconds while `status === 'running'`; on `done` it awaits a fresh `fetchDashboard()` call — this poll-then-refetch is the only place the UI re-pulls KPIs after a run.
+
+**Pipeline-run resilience (2026-08-25):** the Run POST no longer uses a bare `fetch`. It goes through `postWithRetry(url, attempts=3)`, which retries a request only when the failure classifies as a *network* error (the dev-server-stall case — a single-threaded `next dev` busy inside the CPU-bound classification pass can reset/time-out the client connection before the server picks up the fire-and-forget POST). It does not retry on HTTP-level errors (the server was reachable) or on genuine timeouts. The classifier is `describeConnectionFailure()` in `lib/pipeline-messages.ts`, which maps a raw failure to `'timeout' | 'network' | 'other'` and is the single source of truth for both the retry decision and the user-facing message (a timeout now renders "Timeout saat terhubung ke server. Coba lagi." instead of the misleading generic connection message). On an HTTP error, the server's own `error` string is shown rather than the network message.
 
 **Rendered sections**
 
@@ -281,11 +283,12 @@ As of the 2026-08-22 refresh, CLAUDE.md has been updated to fix items 4 (7th mig
 
 ## UI/UX findings from the 2026-08-22 exploration (outside this doc's original pipeline scope)
 
-Captured here since they surfaced during the same pass; the product page inventory itself (all `(dashboard)` pages, auth pages, `dev/explorer`) matches CLAUDE.md exactly with no missing or extra pages.
+Captured here since they surfaced during the same pass; the page inventory (all `(dashboard)` pages, auth pages, `dev/explorer`) matches CLAUDE.md exactly with no missing or extra pages (note: the `/products` page removed 2026-08-22 is absent from both, consistent).
 
-- `app/(dashboard)/reviews` and `app/(dashboard)/settings` have no `loading.tsx`/`error.tsx`, unlike every other dashboard section (`dashboard`, `alerts`, `cases`, `entities/{factories,warehouses,couriers}`, `products`), which all share byte-identical copies of both.
-- The three entity detail pages (`entities/{factories,warehouses,couriers}/[id]/page.tsx`) render a plain "not found" div instead of calling `notFound()`, and each has a non-functional "Lihat semua N batch/pesanan/pengiriman" span with no `href`/`onClick`.
-- Client-side/URL-driven filtering exists only on `products` (server-side via query params) and `reviews` (client-side, 300ms-debounced fetch); `cases`, `alerts`, and the `entities/*` list pages have no search/filter UI.
+- `app/(dashboard)/reviews` and `app/(dashboard)/settings` have no `loading.tsx`/`error.tsx`, unlike every other dashboard section (`dashboard`, `alerts`, `cases`, `entities/{factories,warehouses,couriers}`), which all share byte-identical copies of both. (`products` was removed 2026-08-22 — see below.)
+- The three entity detail pages (`entities/{factories,warehouses,couriers}/[id]/page.tsx`) render a plain "not found" div instead of calling `notFound()`, and each has a non-functional "Lihat semua N batch/pesanan/pengiriman" span with no `href`/`onClick`. As of the 2026-08-25 "benerin frontend" merge, they use the shared `PageHeader` component (`components/page-header.tsx`).
+- Client-side/URL-driven filtering exists only on `reviews` (client-side, 300ms-debounced fetch); `cases`, `alerts`, and the `entities/*` list pages have no search/filter UI. (`products` was the other filtered page before its removal.)
+- **`/products` (Produk) page was removed 2026-08-22** — `app/(dashboard)/products/` (page + loading + error boundaries), the sidebar nav link, the `/products` entry in `lib/auth-routes.ts`'s protected paths, and `tests/products.spec.ts` were all deleted; `tests/navigation.spec.ts`, `lib/auth-routes.test.ts`, and `scripts/add-boundaries.js` were updated to match. Its only data source, `product_stats_view`, remains (migrations aren't retroactively dropped) but is now orphaned/unread.
 - `lib/dossier-summary.ts` (the login page's live pipeline dossier) explicitly documents that its "activity" check is not a literal today-filter — the demo dataset is 2016–2018, so a calendar-day filter would always read empty; it goes false only on a genuinely fresh DB.
 
 ## Adjacent files touched but not deep-dived
@@ -296,5 +299,6 @@ Referenced by the files above; flagged for a follow-up pass if needed.
 - `lib/auth-routes.ts` — `isAuthOnlyPath` / `isProtectedPath` used by middleware
 - `lib/metrics.ts`, `lib/pipeline-messages.ts` — client-side derived metrics and error-message translation
 - `components/trace-strip.tsx`, `components/complaint-trend-chart.tsx`, `components/candidate-ranking.tsx` — dashboard presentation components
+- `components/page-header.tsx` — shared `PageHeader` used across the dashboard pages (added by the 2026-08-25 "benerin frontend" merge)
 - `scripts/nlp-local-eval.ts`, `utils/anomaly-detection.test.ts` — additional consumers of `detectAnomalies` spotted via grep, not read in full
 - `next.config.ts` — `serverExternalPackages: ['@huggingface/transformers']`

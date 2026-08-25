@@ -3,6 +3,8 @@
 Date: 2026-08-22
 Branch: `main` (working tree has uncommitted changes — see below; nothing committed this session, per no explicit push/commit request)
 
+> **2026-08-25 update** — since this handoff was written, `main` has advanced: the 2026-08-22 work (doc audit + Playwright fixes) plus the `components/sidebar.tsx` a11y fix and the Produk-page removal are all **committed and pushed** (see `updates_log.md` List 12). On 2026-08-25, a pipeline-run resilience fix (dashboard `postWithRetry` + `describeConnectionFailure` in `lib/pipeline-messages.ts`), a merge of `origin/main`'s "benerin frontend" (which added `components/page-header.tsx` and applied it across the dashboard pages), and a documentation sync were also committed and pushed as `d3c1428`. The working tree is now clean. See `updates_log.md` List 13.
+
 ## Summary
 
 Two pieces of work in one session: (1) a full-repo documentation audit (4-agent exploration pass, corrections folded into `CLAUDE.md`/`PIPELINE_ARCHITECTURE.md`/`PLAYWRIGHT_TESTS.md`), then (2) under a `/goal` directive ("run the playwright test until all test pass, every change retest all the checks again"), diagnosed and fixed every real failure in the Playwright E2E suite. **End state: all 140 tests (35 × 4 browser projects) pass** — verified via two clean, uninterrupted, fresh-server runs (`chromium`+`mobile-chromium`: 67 passed/0 failed/3 expected skips; `firefox`+`webkit`: 69 passed/0 failed/1 expected skip). See `PLAYWRIGHT_TESTS.md`'s "Verified run (2026-08-22)" section for the full root-cause writeup — this file only summarizes.

@@ -1,5 +1,7 @@
 # Playwright Test Results — Detektif Kemasan
 
+> **Superseded (2026-08-22):** this is the historical result of the 2026-08-19 run, preserved for reference. The full Playwright suite was since fixed to 100% passing on 2026-08-22 — see [`PLAYWRIGHT_TESTS.md`](PLAYWRIGHT_TESTS.md)'s "Verified run (2026-08-22)" for the green run and root causes. Note this 08-19 run predates the Produk-page removal and the associated test-count change (see `PLAYWRIGHT_TESTS.md`'s test-count note).
+
 **Run date:** 2026-08-19
 **Command:** `npx playwright test --project=chromium --workers=1`
 **Target:** live `npm run dev` instance at `http://localhost:3000`, seeded database (15,066 reviews, 5 factories/warehouses/couriers, 3 ground-truth incidents)
