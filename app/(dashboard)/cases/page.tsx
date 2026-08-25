@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Loader2, ChevronRight } from "lucide-react"
+import { Loader2, ChevronRight, FileSearch } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { PageHeader } from "@/components/page-header"
 import { cn } from "@/utils/cn"
 import Link from "next/link"
 import { translateIncidentType } from "@/lib/pipeline-messages"
@@ -47,14 +48,15 @@ export default function CasesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ink">Kasus Anomali</h1>
-        <p className="text-sm text-ink-muted mt-1">Insiden yang terdeteksi oleh AI Intelligence</p>
-      </div>
+      <PageHeader
+        title="Kasus Anomali"
+        description="Insiden yang terdeteksi oleh AI Intelligence"
+        icon={FileSearch}
+      />
 
-      <Card className="bg-paper border-line">
+      <Card className="bg-paper border-line overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border border-line">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-ink-muted uppercase bg-paper-raised border-b border-line font-case">
                 <tr>
@@ -81,7 +83,7 @@ export default function CasesPage() {
                   </tr>
                 ) : (
                   cases.map((c) => (
-                    <tr key={c.id} className="border-b border-line hover:bg-paper-raised/50 transition-colors group">
+                    <tr key={c.id} className="border-b border-line last:border-0 hover:bg-paper-raised/50 transition-colors group">
                       <td className="px-6 py-4 tabular-figures text-ink-muted font-case text-xs">
                         {c.id.split("-")[0]}
                       </td>

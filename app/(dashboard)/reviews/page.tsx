@@ -2,8 +2,9 @@
 
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Search, Loader2, X } from "lucide-react"
+import { Search, Loader2, X, MessageSquareText } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { PageHeader } from "@/components/page-header"
 import { cn } from "@/utils/cn"
 import { translateIncidentType } from "@/lib/pipeline-messages"
 
@@ -97,10 +98,11 @@ function ReviewsContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ink">Ulasan</h1>
-        <p className="text-sm text-ink-muted mt-1">Daftar ulasan pelanggan dan hasil klasifikasi AI</p>
-      </div>
+      <PageHeader
+        title="Ulasan"
+        description="Daftar ulasan pelanggan dan hasil klasifikasi AI"
+        icon={MessageSquareText}
+      />
 
       {hasEntityFilter && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-alert-soft/40 border border-alert/20 rounded-lg text-sm text-alert">
@@ -154,9 +156,9 @@ function ReviewsContent() {
             </select>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border border-line">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-ink-muted uppercase bg-paper-raised border-y border-line font-case">
+              <thead className="text-xs text-ink-muted uppercase bg-paper-raised border-b border-line font-case">
                 <tr>
                   <th className="px-4 py-3 font-medium">Tanggal</th>
                   <th className="px-4 py-3 font-medium">Rating</th>
@@ -186,7 +188,7 @@ function ReviewsContent() {
                   reviews.map((review) => {
                     const prediction = review.complaint_prediction?.[0]
                     return (
-                      <tr key={review.review_id} className="border-b border-line hover:bg-paper-raised/50 transition-colors">
+                      <tr key={review.review_id} className="border-b border-line last:border-0 hover:bg-paper-raised/50 transition-colors">
                         <td className="px-4 py-3 whitespace-nowrap tabular-figures text-ink-muted">
                           {new Date(review.review_date).toLocaleDateString("id-ID")}
                         </td>

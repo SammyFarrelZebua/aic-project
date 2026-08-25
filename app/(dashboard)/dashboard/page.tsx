@@ -249,7 +249,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-full bg-paper text-ink">
-      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-8">
+      <div className="space-y-8">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
           <div>
             <h1 className="mt-1 font-case text-2xl text-ink sm:text-3xl">Beranda</h1>

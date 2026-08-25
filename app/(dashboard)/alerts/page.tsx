@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/page-header'
 import { cn } from '@/utils/cn'
 import { Bell, MapPin, Factory, Truck, PackageX, Clock, SearchX, AlertTriangle } from 'lucide-react'
 
@@ -78,13 +79,11 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Peringatan</h1>
-          <p className="text-ink-muted">Deteksi anomali rantai pasok dan prediksi akar masalah.</p>
-        </div>
-        <Bell className="h-8 w-8 text-ink-muted" />
-      </div>
+      <PageHeader
+        title="Peringatan"
+        description="Deteksi anomali rantai pasok dan prediksi akar masalah"
+        icon={Bell}
+      />
       
       <div className="space-y-4">
         {alerts.length === 0 ? (
