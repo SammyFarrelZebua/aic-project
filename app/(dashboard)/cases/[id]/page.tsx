@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { cookies } from "next/headers"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { PageHeader } from "@/components/page-header"
 import { AlertCircle, Calendar, ShieldAlert, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -78,16 +79,18 @@ export default async function CaseDetailPage({
         Kembali ke Daftar Kasus
       </Link>
 
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <span className="px-2 py-1 text-[10px] font-case rounded uppercase tracking-wider bg-alert-soft text-alert">
+      <PageHeader
+        title="Investigasi Root Cause"
+        description="Dossier analisis anomali otomatis oleh AI"
+        icon={ShieldAlert}
+      >
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 text-[10px] font-case rounded uppercase tracking-wider bg-alert-soft text-alert">
             {translateIncidentType(prediction.incident_type)}
           </span>
-          <span className="text-sm font-case text-ink-muted">ID: {prediction.id.split("-")[0]}</span>
+          <span className="text-sm font-case text-ink-muted tabular-figures">ID: {prediction.id.split("-")[0]}</span>
         </div>
-        <h1 className="text-2xl font-semibold text-ink">Investigasi Root Cause</h1>
-        <p className="text-sm text-ink-muted mt-1">Dossier analisis anomali otomatis oleh AI</p>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-paper border-line md:col-span-2">

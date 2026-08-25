@@ -1,9 +1,10 @@
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/page-header'
 import Link from 'next/link'
 import { cn } from '@/utils/cn'
-import { AlertCircle, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Truck } from 'lucide-react'
 
 export const metadata = { title: "Kurir | Detektif Kemasan" }
 
@@ -31,10 +32,11 @@ export default async function CouriersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ink">Kurir</h1>
-        <p className="text-ink-muted text-sm mt-1">Daftar mitra kurir dan status anomali</p>
-      </div>
+      <PageHeader
+        title="Kurir"
+        description="Daftar mitra kurir dan status anomali"
+        icon={Truck}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {courierStats.map((courier) => (

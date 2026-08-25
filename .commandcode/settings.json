@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(dir:*)",
+      "Shell(npx tsc --noEmit --pretty false 2 >& 1)",
+      "Shell(Select-Object:*)",
+      "Shell(npx tsc --noEmit --pretty false 2>&1)",
+      "Shell(type:*)",
+      "Shell(more:*)",
+      "Shell(npx tsc --noEmit 2 >& 1)",
+      "Shell(npx tsc --noEmit 2>&1)",
+      "Shell(findstr:*)",
+      "powershell",
+      "Shell(npx next lint 2>&1)",
+      "Shell(npx eslint app components --ext .ts,.tsx 2>&1)",
+      "Shell(npx eslint \"components/page-header.tsx\" \"app/(dashboard)/reviews/page.tsx\" \"app/(dashboard)/cases/page.tsx\" \"app/(dashboard)/alerts/page.tsx\" \"app/(dashboard)/settings/page.tsx\" \"app/(dashboard)/entities/factories/page.tsx\" \"app/(dashboard)/entities/warehouses/page.tsx\" \"app/(dashboard)/entities/couriers/page.tsx\" \"app/(dashboard)/dashboard/page.tsx\" \"app/(dashboard)/layout.tsx\" 2>&1)",
+      "Shell(npx eslint \"app/(dashboard)/cases/[id]/page.tsx\" \"app/(dashboard)/entities/factories/[id]/page.tsx\" \"app/(dashboard)/entities/warehouses/[id]/page.tsx\" \"app/(dashboard)/entities/couriers/[id]/page.tsx\" 2>&1)",
+      "Shell(npx next build 2>&1)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

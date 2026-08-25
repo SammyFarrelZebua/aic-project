@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/page-header'
 import Link from 'next/link'
 import { cn } from '@/utils/cn'
 import { AlertCircle, CheckCircle2, ChevronLeft, Truck, Clock } from 'lucide-react'
@@ -40,23 +41,21 @@ export default async function CourierDetailPage({
         </Link>
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink flex items-center gap-3">
-            {courier.courier_provider}
-            {hasAnomalies ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-alert-soft text-alert border border-alert/20">
-                <AlertCircle className="w-3.5 h-3.5" /> Ada Anomali
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-cleared-soft text-cleared border border-cleared/20">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Bersih
-              </span>
-            )}
-          </h1>
-          <p className="text-ink-muted text-sm mt-1 font-case">{courier.courier_id}</p>
-        </div>
-      </div>
+      <PageHeader
+        title={courier.courier_provider}
+        description={courier.courier_id}
+        icon={Truck}
+      >
+        {hasAnomalies ? (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-alert-soft text-alert border border-alert/20">
+            <AlertCircle className="w-3.5 h-3.5" /> Ada Anomali
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-cleared-soft text-cleared border border-cleared/20">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Bersih
+          </span>
+        )}
+      </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="bg-paper-raised">

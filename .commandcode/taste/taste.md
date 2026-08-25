@@ -1,0 +1,6 @@
+- Prefers consistent table border styling across all tables (uniform border treatment — e.g. border-b on thead, border-b on rows with last:border-0, or divide-y on tbody) rather than ad-hoc per-table styling. Confidence: 0.8
+- Wants table/card borders to be fully visible all around (enclosed), not blending into or flush against the container/card edge — expects tables wrapped so the border perimeter is clearly visible. Confidence: 0.7
+- Prefers minimal/simple solutions; explicitly asks to not over-engineer the solution. Confidence: 0.8
+- Prefers page titles/headers to have proper spacing — not flush against the top edge of the content area; expects adequate padding around page headers. Confidence: 0.9
+- Wants page header styling consistent across all pages (uniform title size/weight, icon treatment, description spacing) rather than ad-hoc per-page headers, and expects the fix applied to every similar page ("dan lain-lain"), not just the ones named. Confidence: 0.8
+- Communicates in Indonesian (Bahasa Indonesia). Confidence: 0.7

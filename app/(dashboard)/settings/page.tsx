@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/page-header'
 import { User, Settings as SettingsIcon, Database, Cpu, Mail, BadgeCheck, Shield } from 'lucide-react'
 
 export const metadata = { title: "Pengaturan | Detektif Kemasan" }
@@ -19,13 +20,11 @@ export default async function SettingsPage() {
   
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Pengaturan</h1>
-          <p className="text-ink-muted">Informasi pengguna dan konfigurasi sistem.</p>
-        </div>
-        <SettingsIcon className="h-8 w-8 text-ink-muted" />
-      </div>
+      <PageHeader
+        title="Pengaturan"
+        description="Informasi pengguna dan konfigurasi sistem"
+        icon={SettingsIcon}
+      />
       
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="bg-paper border-line">
