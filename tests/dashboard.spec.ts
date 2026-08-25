@@ -55,8 +55,8 @@ test.describe('Dashboard', () => {
     // forever afterward) -- so the UI's "Selesai dalam ...s" text, which is
     // driven entirely by that polled status, can permanently never appear
     // even though the pipeline itself succeeded. This is a real, separate
-    // bug (see PLAYWRIGHT_TESTS.md), not a timing issue -- widening the
-    // timeout further would not fix it. Until it's fixed at the app level,
+    // bug, not a timing issue -- widening the timeout further would not fix
+    // it. Until it's fixed at the app level,
     // treat a fresh root_cause_predictions row as the authoritative
     // completion signal, and treat the UI text as a nice-to-have that's
     // allowed to lag or miss it.
@@ -178,10 +178,12 @@ test.describe('Dashboard', () => {
 
   test('cancels a running pipeline and allows an immediate re-run', async ({ page }) => {
     // Shares the same in-process pipelineState as the completion test above,
-    // so this must run in its own worker/serial context -- see
-    // PLAYWRIGHT_TESTS.md for the isolation note. Budgeted for two full,
-    // possibly-uncancelled runs back to back (see the "disabled" test above
-    // for why cancellation can't be assumed to cut a run short here).
+    // so this must run in its own worker/serial context -- the pipeline tests
+    // share one in-process state singleton and the same DB tables, so they
+    // cannot run concurrently with each other or with other specs. Budgeted
+    // for two full, possibly-uncancelled runs back to back (see the
+    // "disabled" test above for why cancellation can't be assumed to cut a
+    // run short here).
     test.setTimeout(650_000);
 
     await page.getByRole('button', { name: 'Run Pipeline' }).click();
