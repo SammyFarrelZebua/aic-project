@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createServiceClient } from '@/utils/supabase/service';
 import { cookies } from 'next/headers';
-import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -132,12 +131,6 @@ async function fetchDashboardData() {
   };
 }
 
-const getCachedDashboardData = unstable_cache(
-  fetchDashboardData,
-  ['dashboard-analytics'],
-  { revalidate: 300, tags: ['dashboard-analytics'] }
-);
-
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   const supabaseAuth = createClient(cookieStore);
@@ -148,8 +141,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const isFresh = request.nextUrl.searchParams.get('fresh') === 'true';
-    const data = isFresh ? await fetchDashboardData() : await getCachedDashboardData();
+    // Always read fresh from Supabase. The previous 5-minute `unstable_cache`
+    // (`['dashboard-analytics']`, tag `dashboard-analytics`) could capture a
+    // stale EMPTY snapshot during a pipeline run -- the run clears
+    // complaint_prediction / root_cause_predictions at the start and only
+    // repopulates them near the end (app/api/pipeline/run/route.ts), so any
+    // dashboard load in that window cached zeros, and after a dev-server
+    // restart the pipeline's revalidateTag couldn't reach the new process's
+    // in-memory cache. That left the dashboard showing "--" until the cache
+    // expired or ?fresh=true was hit. The queries below are fast (~1.8s for
+    // the whole payload on this dataset), so caching buys little and costs
+    // correctness. ?fresh=true is still accepted and now just a no-op.
+    const data = await fetchDashboardData();
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
     return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
