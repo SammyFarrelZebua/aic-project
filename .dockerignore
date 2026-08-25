@@ -1,0 +1,12 @@
+node_modules
+.next
+.next-dev
+.git
+.gitignore
+.env*.local
+tests
+playwright-report
+test-results
+coverage
+*.md
+.vscode
